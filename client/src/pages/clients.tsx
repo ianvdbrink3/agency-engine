@@ -39,8 +39,6 @@ const newClientSchema = z.object({
   name: z.string().min(2, "Naam is verplicht"),
   domain: z.string().optional(),
   industry: z.string().optional(),
-  contactName: z.string().optional(),
-  contactEmail: z.string().email("Ongeldig e-mailadres").optional().or(z.literal("")),
   notes: z.string().optional(),
 });
 
@@ -265,34 +263,6 @@ export default function Clients() {
                       <FormLabel>Sector</FormLabel>
                       <FormControl>
                         <Input placeholder="E-commerce" {...field} data-testid="dialog-input-industry" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <FormField
-                  control={form.control}
-                  name="contactName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contactpersoon</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Jan de Vries" {...field} data-testid="dialog-input-contact-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="contactEmail"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>E-mailadres</FormLabel>
-                      <FormControl>
-                        <Input placeholder="jan@acme.nl" {...field} data-testid="dialog-input-contact-email" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
