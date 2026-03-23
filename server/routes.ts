@@ -223,6 +223,32 @@ export async function registerRoutes(
 
   // ── Intake ─────────────────────────────────────────────────────────────────
 
+  // POST /api/intake — create intake data (projectId in body)
+  app.post("/api/intake", async (req: Request, res: Response) => {
+    try {
+      const projectId = parseId(req.body.projectId);
+      if (!projectId) return res.status(400).json({ message: "Invalid or missing projectId" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const parsed = insertIntakeSchema.safeParse({ ...req.body, projectId });
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: parsed.error.flatten() });
+      }
+
+      const existing = await storage.getIntakeData(projectId);
+      let intake;
+      if (existing) {
+        intake = await storage.updateIntakeData(projectId, parsed.data);
+      } else {
+        intake = await storage.createIntakeData(parsed.data);
+      }
+      return res.status(existing ? 200 : 201).json(intake);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
   // GET /api/projects/:id/intake
   app.get("/api/projects/:id/intake", async (req: Request, res: Response) => {
     try {
