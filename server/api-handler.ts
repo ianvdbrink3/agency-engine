@@ -1,6 +1,7 @@
 import express from "express";
-import { registerRoutes } from "../server/routes.js";
 import { createServer } from "http";
+import { registerRoutes } from "./routes";
+import type { Request, Response, NextFunction } from "express";
 
 const app = express();
 
@@ -8,14 +9,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 let initialized = false;
-let httpServer;
 
 async function init() {
   if (initialized) return;
-  httpServer = createServer(app);
+  const httpServer = createServer(app);
   await registerRoutes(httpServer, app);
 
-  app.use((err, _req, res, _next) => {
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
     res.status(status).json({ message });
@@ -24,9 +24,7 @@ async function init() {
   initialized = true;
 }
 
-const handler = async (req, res) => {
+export default async function handler(req: Request, res: Response) {
   await init();
-  return app(req, res);
-};
-
-export default handler;
+  return app(req as any, res as any);
+}
