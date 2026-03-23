@@ -74,7 +74,8 @@
     "zod": "^3.24.2",
     "zod-validation-error": "^3.4.0",
     "@neondatabase/serverless": "^0.10.4",
-    "drizzle-kit": "^0.31.0"
+    "drizzle-kit": "^0.31.0",
+    "@anthropic-ai/sdk": "^0.39.0"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",

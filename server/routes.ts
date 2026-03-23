@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { gatherKeywordsForIntake } from "./dataforseo";
-import { generateStrategy } from "./strategy-generator";
+import { generateStrategyWithClaude } from "./claude-service";
 import {
   insertClientSchema,
   insertProjectSchema,
@@ -352,8 +352,8 @@ export async function registerRoutes(
           language: intake.language,
         });
 
-        // Generate strategy deterministically
-        const strategy = generateStrategy(intake, keywords);
+        // Generate strategy using Claude AI
+        const strategy = await generateStrategyWithClaude(intake, keywords);
 
         // Upsert SEO data
         const existingSeo = await storage.getSeoData(id);

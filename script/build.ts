@@ -29,6 +29,7 @@ const allowlist = [
   "zod",
   "zod-validation-error",
   "@neondatabase/serverless",
+  "@anthropic-ai/sdk",
 ];
 
 async function buildAll() {
