@@ -28,7 +28,7 @@ const allowlist = [
   "xlsx",
   "zod",
   "zod-validation-error",
-  "sql.js",
+  "@neondatabase/serverless",
 ];
 
 async function buildAll() {
