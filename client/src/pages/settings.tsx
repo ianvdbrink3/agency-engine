@@ -137,7 +137,7 @@ export default function SettingsPage() {
             <CardTitle>Claude AI Configuratie</CardTitle>
           </div>
           <CardDescription>
-            Claude is de centrale intelligentielaag van Agency Engine. Een API key is vereist voor AI-analyses.
+            Claude is de centrale intelligentielaag van THIJO Marketing Tool. Een API key is vereist voor AI-analyses.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

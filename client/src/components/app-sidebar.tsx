@@ -33,14 +33,14 @@ const NAV_ITEMS = [
   { href: "/settings", label: "Instellingen", icon: Settings },
 ];
 
-function AgencyEngineLogo() {
+function ThijoLogo() {
   return (
     <svg
       viewBox="0 0 32 32"
       width="28"
       height="28"
       fill="none"
-      aria-label="Agency Engine"
+      aria-label="THIJO Marketing Tool"
       className="flex-shrink-0"
     >
       {/* Gear outer ring */}
@@ -84,13 +84,13 @@ export function AppSidebar() {
       {/* Header */}
       <SidebarHeader className="px-4 py-4 border-b border-sidebar-border">
         <Link href="/" className="flex items-center gap-2.5 group" data-testid="link-logo-home">
-          <AgencyEngineLogo />
+          <ThijoLogo />
           <div>
             <span className="text-sm font-bold text-sidebar-foreground tracking-tight leading-none block">
-              Agency Engine
+              THIJO
             </span>
             <span className="text-[10px] text-sidebar-foreground/50 leading-none mt-0.5 block">
-              Marketing Platform
+              Marketing Tool
             </span>
           </div>
         </Link>
@@ -208,14 +208,9 @@ export function AppSidebar() {
           )}
         </Button>
         <div className="mt-2 px-1">
-          <a
-            href="https://www.perplexity.ai/computer"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] text-sidebar-foreground/30 hover:text-sidebar-foreground/50 transition-colors"
-          >
-            Gemaakt met Perplexity Computer
-          </a>
+          <span className="text-[10px] text-sidebar-foreground/30">
+            THIJO Marketing Tool
+          </span>
         </div>
       </SidebarFooter>
     </Sidebar>
