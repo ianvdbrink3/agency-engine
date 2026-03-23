@@ -162,10 +162,13 @@ function AdGroupCard({ group }: { group: AdGroup }) {
 
 export function SeaOverview({ seaData }: SeaOverviewProps) {
   const campaigns = parseJson<Campaign[]>(seaData.campaigns, []);
-  const budgetAllocation = parseJson<{ name: string; budget: number; percent: number }[]>(
-    seaData.budgetAllocation,
-    []
-  );
+  const rawBudget = parseJson<any[]>(seaData.budgetAllocation, []);
+  const budgetAllocation = rawBudget.map((b: any) => ({
+    name: b.name ?? b.campaign ?? "",
+    budget: b.budget ?? 0,
+    percent: b.percent ?? b.percentage ?? 0,
+    rationale: b.rationale ?? "",
+  }));
   const negativeKeywords = parseJson<string[]>(seaData.negativeKeywords, []);
 
   const totalBudget = budgetAllocation.reduce((s, b) => s + b.budget, 0);

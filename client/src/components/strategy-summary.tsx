@@ -33,16 +33,39 @@ const PRIORITY_CONFIG = {
 };
 
 export function StrategySummaryView({ summary }: StrategySummaryProps) {
-  const keyFindings = parseJson<string[]>(summary.keyFindings, []);
-  const recommendations = parseJson<{ title: string; description: string; priority: string }[]>(
-    summary.recommendations,
-    []
+  const keyFindings = parseJson<any[]>(summary.keyFindings, []).map((f: any) =>
+    typeof f === "string" ? f : f.text ?? f.finding ?? JSON.stringify(f)
   );
-  const checklist = parseJson<ChecklistItem[]>(summary.implementationChecklist, []);
-  const estimates = parseJson<{ metric: string; value: string; description?: string }[]>(
-    summary.performanceEstimates,
-    []
-  );
+
+  const rawRecs = parseJson<any[]>(summary.recommendations, []);
+  const recommendations = rawRecs.map((rec: any) => {
+    if (typeof rec === "string") return { title: rec, description: "", priority: "medium" };
+    return { title: rec.title ?? rec.text ?? "", description: rec.description ?? "", priority: rec.priority ?? "medium" };
+  });
+
+  const rawChecklist = parseJson<any[]>(summary.implementationChecklist, []);
+  const checklist: ChecklistItem[] = rawChecklist.map((item: any) => {
+    if (typeof item === "string") return { task: item, category: "Algemeen", priority: "medium" as const, status: "pending" as const };
+    return {
+      task: item.task ?? item.text ?? "",
+      category: item.category ?? "Algemeen",
+      priority: item.priority ?? "medium",
+      status: item.status ?? "pending",
+      ...(item.aiNote ? { aiNote: item.aiNote } : {}),
+    };
+  });
+
+  const rawEstimates = parseJson<any[]>(summary.performanceEstimates, []);
+  const estimates = rawEstimates.map((est: any) => ({
+    metric: est.metric ?? "",
+    value: est.month3 ?? est.value ?? "",
+    current: est.current ?? "",
+    month3: est.month3 ?? "",
+    month6: est.month6 ?? "",
+    month12: est.month12 ?? "",
+    confidence: est.confidence ?? "",
+    description: est.description ?? "",
+  }));
 
   const [checklistState, setChecklistState] = useState<Record<number, boolean>>(() => {
     return Object.fromEntries(
