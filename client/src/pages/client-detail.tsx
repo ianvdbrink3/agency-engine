@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link, useParams, useLocation } from "wouter";
 import {
   ArrowLeft,
   Plus,
@@ -10,11 +10,23 @@ import {
   FolderOpen,
   ArrowRight,
   StickyNote,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -23,6 +35,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Client, Project } from "@shared/schema";
 
 function formatDate(dateStr: string) {
@@ -40,6 +54,8 @@ function formatDate(dateStr: string) {
 export default function ClientDetail() {
   const params = useParams<{ id: string }>();
   const clientId = Number(params.id);
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
 
   const { data: client, isLoading: clientLoading } = useQuery<Client>({
     queryKey: ["/api/clients", clientId],
@@ -47,6 +63,20 @@ export default function ClientDetail() {
 
   const { data: projects, isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: ["/api/clients", clientId, "projects"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/clients/${clientId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      toast({ title: "Klant verwijderd", description: `${client?.name ?? "Klant"} is verwijderd.` });
+      navigate("/clients");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Fout bij verwijderen", description: err.message, variant: "destructive" });
+    },
   });
 
   const isLoading = clientLoading || projectsLoading;
@@ -102,17 +132,48 @@ export default function ClientDetail() {
             )}
           </div>
         </div>
-        <Button
-          size="sm"
-          asChild
-          className="gap-1.5 shrink-0"
-          data-testid="button-new-project"
-        >
-          <Link href={`/clients/${clientId}/projects/new`}>
-            <Plus className="w-4 h-4" />
-            Nieuw project
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+              >
+                <Trash2 className="w-4 h-4" />
+                Verwijderen
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Klant verwijderen?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Weet je zeker dat je <strong>{client.name}</strong> wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuleren</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteMutation.mutate()}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deleteMutation.isPending ? "Verwijderen..." : "Verwijderen"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Button
+            size="sm"
+            asChild
+            className="gap-1.5"
+            data-testid="button-new-project"
+          >
+            <Link href={`/clients/${clientId}/projects/new`}>
+              <Plus className="w-4 h-4" />
+              Nieuw project
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Client info */}
