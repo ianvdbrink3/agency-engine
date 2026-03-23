@@ -127,6 +127,30 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/projects — create project (clientId in body)
+  app.post("/api/projects", async (req: Request, res: Response) => {
+    try {
+      const clientId = parseId(req.body.clientId);
+      if (!clientId) return res.status(400).json({ message: "Invalid or missing clientId" });
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const parsed = insertProjectSchema.safeParse({
+        ...req.body,
+        clientId,
+        status: req.body.status ?? "intake",
+        createdAt: req.body.createdAt ?? new Date().toISOString(),
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: parsed.error.flatten() });
+      }
+      const project = await storage.createProject(parsed.data);
+      return res.status(201).json(project);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
   // POST /api/clients/:clientId/projects — create project for a client
   app.post("/api/clients/:clientId/projects", async (req: Request, res: Response) => {
     try {
