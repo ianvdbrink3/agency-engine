@@ -35,34 +35,14 @@ const NAV_ITEMS = [
 
 function ThijoLogo() {
   return (
-    <svg
-      viewBox="0 0 32 32"
-      width="28"
+    <img
+      src="/logo-clickwave.png"
+      alt="Clickwave"
+      width="120"
       height="28"
-      fill="none"
-      aria-label="THIJO Marketing Tool"
-      className="flex-shrink-0"
-    >
-      {/* Gear outer ring */}
-      <circle cx="16" cy="16" r="13" stroke="hsl(199 89% 48%)" strokeWidth="2" />
-      {/* Gear teeth */}
-      {[0, 45, 90, 135, 180, 225, 270, 315].map((deg, i) => (
-        <rect
-          key={i}
-          x="14.5"
-          y="1"
-          width="3"
-          height="5"
-          rx="1"
-          fill="hsl(199 89% 48%)"
-          transform={`rotate(${deg} 16 16)`}
-        />
-      ))}
-      {/* Inner circle */}
-      <circle cx="16" cy="16" r="5" fill="hsl(199 89% 48%)" />
-      {/* Center dot */}
-      <circle cx="16" cy="16" r="2" fill="hsl(222 47% 11%)" />
-    </svg>
+      className="flex-shrink-0 brightness-0 dark:brightness-100 dark:invert-0 invert"
+      style={{ objectFit: "contain" }}
+    />
   );
 }
 
@@ -83,16 +63,8 @@ export function AppSidebar() {
     >
       {/* Header */}
       <SidebarHeader className="px-4 py-4 border-b border-sidebar-border">
-        <Link href="/" className="flex items-center gap-2.5 group" data-testid="link-logo-home">
+        <Link href="/" className="flex items-center group" data-testid="link-logo-home">
           <ThijoLogo />
-          <div>
-            <span className="text-sm font-bold text-sidebar-foreground tracking-tight leading-none block">
-              THIJO
-            </span>
-            <span className="text-[10px] text-sidebar-foreground/50 leading-none mt-0.5 block">
-              Marketing Tool
-            </span>
-          </div>
         </Link>
       </SidebarHeader>
 
