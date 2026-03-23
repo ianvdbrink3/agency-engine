@@ -28,7 +28,11 @@ const isVercel = process.env.VERCEL === "1";
 async function initDb(): Promise<Database> {
   if (db) return db;
 
-  const SQL = await initSqlJs();
+  const SQL = await initSqlJs(
+    isVercel
+      ? { locateFile: (file: string) => `https://sql.js.org/dist/${file}` }
+      : undefined
+  );
 
   if (!isVercel && fs.existsSync(DB_PATH)) {
     const buffer = fs.readFileSync(DB_PATH);
