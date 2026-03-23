@@ -161,7 +161,7 @@ export function AppSidebar() {
               {recentClients.map((client) => {
                 const isActive = location === `/clients/${client.id}`;
                 return (
-                  <SidebarMenuItem key={client.id} className="group/item">
+                  <SidebarMenuItem key={client.id}>
                     <div className="flex items-center w-full">
                       <SidebarMenuButton
                         asChild
@@ -172,13 +172,12 @@ export function AppSidebar() {
                         <Link href={`/clients/${client.id}`}>
                           <Building2 className="w-3.5 h-3.5 shrink-0" />
                           <span className="truncate text-sm">{client.name}</span>
-                          <ChevronRight className="w-3 h-3 ml-auto opacity-40 group-hover/item:hidden" />
                         </Link>
                       </SidebarMenuButton>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <button
-                            className="hidden group-hover/item:flex items-center justify-center w-6 h-6 rounded text-sidebar-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 mr-1"
+                            className="flex items-center justify-center w-6 h-6 rounded text-sidebar-foreground/20 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 mr-1"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
