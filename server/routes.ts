@@ -516,5 +516,64 @@ export async function registerRoutes(
     }
   });
 
+  // ── Settings ──────────────────────────────────────────────────────────────
+
+  // GET /api/settings — get all settings (values masked for sensitive keys)
+  app.get("/api/settings", async (_req: Request, res: Response) => {
+    try {
+      const all = await storage.getAllSettings();
+      const masked = all.map((s) => ({
+        ...s,
+        value: s.key.toLowerCase().includes("key") || s.key.toLowerCase().includes("password")
+          ? s.value.substring(0, 8) + "..." + s.value.substring(s.value.length - 4)
+          : s.value,
+      }));
+      return res.json(masked);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
+  // GET /api/settings/:key — get single setting
+  app.get("/api/settings/:key", async (req: Request, res: Response) => {
+    try {
+      const value = await storage.getSetting(req.params.key);
+      if (value === undefined) return res.status(404).json({ message: "Setting not found" });
+      return res.json({ key: req.params.key, value });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
+  // PUT /api/settings — upsert multiple settings
+  app.put("/api/settings", async (req: Request, res: Response) => {
+    try {
+      const entries = req.body as { key: string; value: string }[];
+      if (!Array.isArray(entries)) {
+        return res.status(400).json({ message: "Body must be an array of {key, value} objects" });
+      }
+      const results = [];
+      for (const entry of entries) {
+        if (!entry.key || typeof entry.value !== "string") continue;
+        const result = await storage.setSetting(entry.key, entry.value);
+        results.push(result);
+      }
+      return res.json({ message: "Settings saved", count: results.length });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
+  // DELETE /api/settings/:key — delete a setting
+  app.delete("/api/settings/:key", async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteSetting(req.params.key);
+      if (!deleted) return res.status(404).json({ message: "Setting not found" });
+      return res.json({ message: "Setting deleted" });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
   return httpServer;
 }

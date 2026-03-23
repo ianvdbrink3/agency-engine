@@ -14,12 +14,15 @@ import type {
   InsertSea,
   InsertStrategySummary,
 } from "@shared/schema";
+import { storage } from "./storage";
 
 // ─── Client ──────────────────────────────────────────────────────────────────
 
-function getClient(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is niet ingesteld. Voeg deze toe in Vercel Environment Variables.");
+async function getClient(): Promise<Anthropic> {
+  // Try DB settings first, then env var
+  const dbKey = await storage.getSetting("anthropic_api_key");
+  const apiKey = dbKey || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("Anthropic API key is niet ingesteld. Ga naar Instellingen om deze toe te voegen.");
   return new Anthropic({ apiKey });
 }
 
@@ -274,7 +277,7 @@ Wees specifiek, data-gedreven en actionable. Schrijf voor een Nederlands marketi
 // ─── Claude API Call ──────────────────────────────────────────────────────────
 
 async function callClaude(prompt: string): Promise<any> {
-  const client = getClient();
+  const client = await getClient();
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",

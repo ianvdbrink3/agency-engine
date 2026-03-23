@@ -13,6 +13,7 @@ import {
   type InsertSea,
   type StrategySummary,
   type InsertStrategySummary,
+  type Setting,
   users,
   clients,
   projects,
@@ -20,6 +21,7 @@ import {
   seoData,
   seaData,
   strategySummary,
+  settings,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
@@ -59,6 +61,10 @@ export interface IStorage {
   getStrategySummary(projectId: number): Promise<StrategySummary | undefined>;
   createStrategySummary(data: InsertStrategySummary): Promise<StrategySummary>;
   updateStrategySummary(projectId: number, data: Partial<InsertStrategySummary>): Promise<StrategySummary | undefined>;
+  getSetting(key: string): Promise<string | undefined>;
+  setSetting(key: string, value: string): Promise<Setting>;
+  getAllSettings(): Promise<Setting[]>;
+  deleteSetting(key: string): Promise<boolean>;
 }
 
 // ─── Implementation ─────────────────────────────────────────────────────────
@@ -196,6 +202,31 @@ export class DatabaseStorage implements IStorage {
     if (Object.keys(data).length === 0) return this.getStrategySummary(projectId);
     const rows = await db.update(strategySummary).set(data).where(eq(strategySummary.projectId, projectId)).returning();
     return rows[0];
+  }
+
+  async getSetting(key: string): Promise<string | undefined> {
+    const rows = await db.select().from(settings).where(eq(settings.key, key));
+    return rows[0]?.value;
+  }
+
+  async setSetting(key: string, value: string): Promise<Setting> {
+    // Upsert: try update first, then insert
+    const existing = await db.select().from(settings).where(eq(settings.key, key));
+    if (existing.length > 0) {
+      const rows = await db.update(settings).set({ value }).where(eq(settings.key, key)).returning();
+      return rows[0];
+    }
+    const rows = await db.insert(settings).values({ key, value }).returning();
+    return rows[0];
+  }
+
+  async getAllSettings(): Promise<Setting[]> {
+    return db.select().from(settings);
+  }
+
+  async deleteSetting(key: string): Promise<boolean> {
+    const rows = await db.delete(settings).where(eq(settings.key, key)).returning();
+    return rows.length > 0;
   }
 }
 

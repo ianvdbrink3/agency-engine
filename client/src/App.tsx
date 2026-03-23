@@ -13,6 +13,7 @@ import Clients from "@/pages/clients";
 import ClientDetail from "@/pages/client-detail";
 import ProjectIntake from "@/pages/project-intake";
 import ProjectDashboard from "@/pages/project-dashboard";
+import SettingsPage from "@/pages/settings";
 
 function AppRouter() {
   return (
@@ -22,6 +23,7 @@ function AppRouter() {
       <Route path="/clients/:id" component={ClientDetail} />
       <Route path="/clients/:clientId/projects/new" component={ProjectIntake} />
       <Route path="/projects/:id" component={ProjectDashboard} />
+      <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
   );

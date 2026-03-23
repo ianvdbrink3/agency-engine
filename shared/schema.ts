@@ -2,6 +2,17 @@ import { pgTable, text, serial, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// ─── Settings ───────────────────────────────────────────
+export const settings = pgTable("settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+});
+
+export const insertSettingSchema = createInsertSchema(settings).omit({ id: true });
+export type InsertSetting = z.infer<typeof insertSettingSchema>;
+export type Setting = typeof settings.$inferSelect;
+
 // ─── Users ──────────────────────────────────────────────
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),

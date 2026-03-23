@@ -7,6 +7,7 @@ import {
   Sun,
   Moon,
   Building2,
+  Settings,
 } from "lucide-react";
 import {
   Sidebar,
@@ -29,6 +30,7 @@ import type { Client } from "@shared/schema";
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/clients", label: "Klanten", icon: Users },
+  { href: "/settings", label: "Instellingen", icon: Settings },
 ];
 
 function AgencyEngineLogo() {

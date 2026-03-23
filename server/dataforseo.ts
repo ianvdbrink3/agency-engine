@@ -6,19 +6,27 @@
  */
 
 import type { KeywordEntry } from "@shared/schema";
+import { storage } from "./storage";
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
-function getAuthHeader(): string | null {
-  const login = process.env.DATAFORSEO_LOGIN;
-  const password = process.env.DATAFORSEO_PASSWORD;
+async function getAuthHeader(): Promise<string | null> {
+  const dbLogin = await storage.getSetting("dataforseo_login");
+  const dbPassword = await storage.getSetting("dataforseo_password");
+  const login = dbLogin || process.env.DATAFORSEO_LOGIN;
+  const password = dbPassword || process.env.DATAFORSEO_PASSWORD;
   if (!login || !password) return null;
   const encoded = Buffer.from(`${login}:${password}`).toString("base64");
   return `Basic ${encoded}`;
 }
 
-function hasCredentials(): boolean {
-  return !!(process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD);
+async function hasCredentials(): Promise<boolean> {
+  const dbLogin = await storage.getSetting("dataforseo_login");
+  const dbPassword = await storage.getSetting("dataforseo_password");
+  return !!(
+    (dbLogin || process.env.DATAFORSEO_LOGIN) &&
+    (dbPassword || process.env.DATAFORSEO_PASSWORD)
+  );
 }
 
 // ─── Location / Language Mapping ─────────────────────────────────────────────
@@ -106,7 +114,7 @@ export function getLanguageCode(language: string): string {
 // ─── API Helpers ──────────────────────────────────────────────────────────────
 
 async function dataForSeoPost<T>(endpoint: string, body: unknown): Promise<T> {
-  const auth = getAuthHeader();
+  const auth = await getAuthHeader();
   if (!auth) throw new Error("DataForSEO credentials not set");
 
   const response = await fetch(`https://api.dataforseo.com${endpoint}`, {
@@ -252,7 +260,7 @@ export async function fetchKeywordData(
   locationCode: number,
   languageCode: string
 ): Promise<KeywordEntry[]> {
-  if (!hasCredentials()) {
+  if (!(await hasCredentials())) {
     console.log("[DataForSEO] No credentials — using mock keyword data");
     return generateMockKeywordsForQuery(keywords);
   }
@@ -295,7 +303,7 @@ export async function fetchKeywordSuggestions(
   locationCode: number,
   languageCode: string
 ): Promise<KeywordEntry[]> {
-  if (!hasCredentials()) {
+  if (!(await hasCredentials())) {
     console.log("[DataForSEO] No credentials — using mock suggestion data");
     // Return mock keywords filtered/related to the input
     return MOCK_DUTCH_KEYWORDS.filter((k) => {
@@ -342,7 +350,7 @@ export async function fetchKeywordIdeas(
   locationCode: number,
   languageCode: string
 ): Promise<KeywordEntry[]> {
-  if (!hasCredentials()) {
+  if (!(await hasCredentials())) {
     console.log("[DataForSEO] No credentials — using mock keyword ideas data");
     return MOCK_DUTCH_KEYWORDS;
   }
