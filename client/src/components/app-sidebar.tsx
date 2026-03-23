@@ -62,9 +62,19 @@ export function AppSidebar() {
       data-testid="app-sidebar"
     >
       {/* Header */}
-      <SidebarHeader className="px-4 py-4 border-b border-sidebar-border">
-        <Link href="/" className="flex items-center group" data-testid="link-logo-home">
-          <ThijoLogo />
+      <SidebarHeader className="px-4 py-5 border-b border-sidebar-border">
+        <Link href="/" className="flex flex-col items-start gap-2 group" data-testid="link-logo-home">
+          <img
+            src="/logo-clickwave.png"
+            alt="Clickwave"
+            width="140"
+            height="32"
+            className="flex-shrink-0 brightness-0 dark:brightness-100 dark:invert-0 invert"
+            style={{ objectFit: "contain" }}
+          />
+          <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-sidebar-foreground/40">
+            THIJO
+          </span>
         </Link>
       </SidebarHeader>
 
