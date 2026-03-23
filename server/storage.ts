@@ -27,7 +27,7 @@ import { eq } from "drizzle-orm";
 
 // ─── Database Initialization ────────────────────────────────────────────────
 
-const sql = neon(process.env.DATABASE_URL!);
+const sql = neon(process.env.database_DATABASE_URL || process.env.DATABASE_URL!);
 const db = drizzle(sql);
 
 // ─── Interface ──────────────────────────────────────────────────────────────
