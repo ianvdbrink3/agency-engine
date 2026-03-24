@@ -309,7 +309,18 @@ export default function SettingsPage() {
               </div>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">De uitnodigingscode wordt automatisch aangemaakt bij de eerste registratie.</p>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">Er is nog geen uitnodigingscode. Maak er een aan om collega's uit te nodigen.</p>
+              <Button variant="outline" className="gap-1.5" onClick={async () => {
+                const newCode = Math.random().toString(36).substring(2, 14);
+                await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify([{ key: "invite_code", value: newCode }]) });
+                setInviteCode(newCode);
+                toast({ title: "Uitnodigingscode aangemaakt" });
+              }}>
+                <Link2 className="h-3.5 w-3.5" />
+                Code aanmaken
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
