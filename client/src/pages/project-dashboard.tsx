@@ -6,6 +6,8 @@ import {
   Calendar,
   Building2,
   FileText,
+  Search,
+  Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -63,8 +65,8 @@ export default function ProjectDashboard() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/projects/${projectId}/generate`);
+    mutationFn: async (type: "seo" | "sea" | "both") => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/generate`, { type });
       return res.json();
     },
     onSuccess: () => {
@@ -170,25 +172,47 @@ export default function ProjectDashboard() {
           </div>
         </div>
 
-        {/* Generate button */}
-        <Button
-          onClick={() => generateMutation.mutate()}
-          disabled={generateMutation.isPending || isDataLoading}
-          className="gap-2 shrink-0"
-          data-testid="button-generate-strategy"
-        >
+        {/* Generate buttons */}
+        <div className="flex items-center gap-2 shrink-0">
           {generateMutation.isPending ? (
-            <>
+            <Button disabled className="gap-2">
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               Genereren...
-            </>
+            </Button>
           ) : (
             <>
-              <Zap className="w-4 h-4" />
-              {hasData ? "Opnieuw genereren" : "Strategie genereren"}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateMutation.mutate("seo")}
+                disabled={isDataLoading}
+                className="gap-1.5"
+              >
+                <Search className="w-3.5 h-3.5" />
+                SEO
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateMutation.mutate("sea")}
+                disabled={isDataLoading}
+                className="gap-1.5"
+              >
+                <Target className="w-3.5 h-3.5" />
+                SEA
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => generateMutation.mutate("both")}
+                disabled={isDataLoading}
+                className="gap-1.5"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Beide
+              </Button>
             </>
           )}
-        </Button>
+        </div>
       </div>
 
       {/* Intake summary card */}

@@ -327,35 +327,46 @@ export interface GeneratedStrategy {
 
 export async function generateStrategyWithClaude(
   intake: Intake,
-  keywords: KeywordEntry[]
+  keywords: KeywordEntry[],
+  type: "seo" | "sea" | "both" = "both"
 ): Promise<GeneratedStrategy> {
-  console.log(`[Claude] Generating strategy for ${intake.companyName} with ${keywords.length} keywords...`);
+  console.log(`[Claude] Generating ${type} strategy for ${intake.companyName} with ${keywords.length} keywords...`);
 
-  // Limit keywords sent to Claude to avoid token bloat
   const topKeywords = keywords.slice(0, 30);
+  let seoResult: any = null;
+  let seaResult: any = null;
+  let summaryResult: any = null;
 
-  // Step 1: Run SEO and SEA in PARALLEL to save time
-  console.log("[Claude] Step 1/2: SEO + SEA strategy (parallel)...");
-  const [seoResult, seaResult] = await Promise.all([
-    callClaude(buildSeoPrompt(intake, topKeywords)),
-    callClaude(buildSeaPrompt(intake, topKeywords)),
-  ]);
+  if (type === "both") {
+    // Run SEO and SEA in parallel
+    console.log("[Claude] Running SEO + SEA in parallel...");
+    [seoResult, seaResult] = await Promise.all([
+      callClaude(buildSeoPrompt(intake, topKeywords)),
+      callClaude(buildSeaPrompt(intake, topKeywords)),
+    ]);
+  } else if (type === "seo") {
+    console.log("[Claude] Running SEO only...");
+    seoResult = await callClaude(buildSeoPrompt(intake, topKeywords));
+  } else {
+    console.log("[Claude] Running SEA only...");
+    seaResult = await callClaude(buildSeaPrompt(intake, topKeywords));
+  }
 
-  // Step 2: Quick summary (uses smaller context)
-  console.log("[Claude] Step 2/2: Executive summary...");
-  const summaryResult = await callClaude(
+  // Quick summary
+  console.log("[Claude] Generating summary...");
+  summaryResult = await callClaude(
     buildSummaryPrompt(
       intake,
       topKeywords,
-      JSON.stringify((seoResult.clusters ?? []).slice(0, 3).map((c: any) => c.name)),
-      JSON.stringify((seaResult.campaigns ?? []).slice(0, 3).map((c: any) => c.name))
+      seoResult ? JSON.stringify((seoResult.clusters ?? []).slice(0, 3).map((c: any) => c.name)) : "[]",
+      seaResult ? JSON.stringify((seaResult.campaigns ?? []).slice(0, 3).map((c: any) => c.name)) : "[]"
     )
   );
 
   console.log("[Claude] Strategy generation complete!");
 
   return {
-    seo: {
+    seo: seoResult ? {
       projectId: intake.projectId,
       keywords: JSON.stringify(seoResult.keywords ?? []),
       clusters: JSON.stringify(seoResult.clusters ?? []),
@@ -364,8 +375,8 @@ export async function generateStrategyWithClaude(
       internalLinks: JSON.stringify(seoResult.internalLinks ?? []),
       metadata: JSON.stringify(seoResult.metadata ?? []),
       priorityMatrix: JSON.stringify(seoResult.priorityMatrix ?? []),
-    },
-    sea: {
+    } : null as any,
+    sea: seaResult ? {
       projectId: intake.projectId,
       campaigns: JSON.stringify(seaResult.campaigns ?? []),
       adGroups: JSON.stringify(
@@ -376,7 +387,7 @@ export async function generateStrategyWithClaude(
       budgetAllocation: JSON.stringify(seaResult.budgetAllocation ?? []),
       landingPages: JSON.stringify(seaResult.landingPages ?? []),
       bidStrategy: JSON.stringify(seaResult.bidStrategy ?? []),
-    },
+    } : null as any,
     summary: {
       projectId: intake.projectId,
       executiveSummary: summaryResult.executiveSummary ?? "",

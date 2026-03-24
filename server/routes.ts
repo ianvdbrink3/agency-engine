@@ -485,11 +485,12 @@ export async function registerRoutes(
 
   // ── Generate Strategy ──────────────────────────────────────────────────────
 
-  // POST /api/projects/:id/generate — triggers full strategy generation
+  // POST /api/projects/:id/generate — triggers strategy generation (type: seo, sea, or both)
   app.post("/api/projects/:id/generate", async (req: Request, res: Response) => {
     try {
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ message: "Invalid project ID" });
+      const type = (req.body.type ?? "both") as "seo" | "sea" | "both";
 
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ message: "Project not found" });
@@ -497,11 +498,9 @@ export async function registerRoutes(
       const intake = await storage.getIntakeData(id);
       if (!intake) return res.status(422).json({ message: "Intake data required before generating strategy" });
 
-      // Set project status to processing
       await storage.updateProjectStatus(id, "processing");
 
       try {
-        // Gather keywords via DataForSEO (or mock data)
         const focusServices = parseJsonArray(intake.focusServices);
         const keywords = await gatherKeywordsForIntake({
           domain: intake.domain,
@@ -512,43 +511,38 @@ export async function registerRoutes(
           language: intake.language,
         });
 
-        // Generate strategy using Claude AI
-        const strategy = await generateStrategyWithClaude(intake, keywords);
+        const strategy = await generateStrategyWithClaude(intake, keywords, type);
 
-        // Upsert SEO data
-        const existingSeo = await storage.getSeoData(id);
-        if (existingSeo) {
-          await storage.updateSeoData(id, strategy.seo);
-        } else {
-          await storage.createSeoData(strategy.seo);
+        // Upsert SEO data (if generated)
+        if (strategy.seo) {
+          const existingSeo = await storage.getSeoData(id);
+          if (existingSeo) { await storage.updateSeoData(id, strategy.seo); }
+          else { await storage.createSeoData(strategy.seo); }
         }
 
-        // Upsert SEA data
-        const existingSea = await storage.getSeaData(id);
-        if (existingSea) {
-          await storage.updateSeaData(id, strategy.sea);
-        } else {
-          await storage.createSeaData(strategy.sea);
+        // Upsert SEA data (if generated)
+        if (strategy.sea) {
+          const existingSea = await storage.getSeaData(id);
+          if (existingSea) { await storage.updateSeaData(id, strategy.sea); }
+          else { await storage.createSeaData(strategy.sea); }
         }
 
-        // Upsert summary
-        const existingSummary = await storage.getStrategySummary(id);
-        if (existingSummary) {
-          await storage.updateStrategySummary(id, strategy.summary);
-        } else {
-          await storage.createStrategySummary(strategy.summary);
+        // Upsert summary (always generated)
+        if (strategy.summary) {
+          const existingSummary = await storage.getStrategySummary(id);
+          if (existingSummary) { await storage.updateStrategySummary(id, strategy.summary); }
+          else { await storage.createStrategySummary(strategy.summary); }
         }
 
-        // Set project status to completed
         const updatedProject = await storage.updateProjectStatus(id, "completed");
 
         return res.json({
           message: "Strategy generated successfully",
           project: updatedProject,
           keywordCount: keywords.length,
+          type,
         });
       } catch (genErr: any) {
-        // Revert status to intake on generation failure
         await storage.updateProjectStatus(id, "intake");
         throw genErr;
       }
