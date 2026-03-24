@@ -131,15 +131,21 @@ export async function registerRoutes(
 
   // ── Clients ────────────────────────────────────────────────────────────────
 
-  // GET /api/clients — list clients for current user
+  // GET /api/clients — list own clients + shared clients
   app.get("/api/clients", async (req: Request, res: Response) => {
     try {
       const user = await getUserFromRequest(req);
       if (user) {
-        const all = await storage.listClientsByUser(user.id);
-        return res.json(all);
+        const own = await storage.listClientsByUser(user.id);
+        const shared = await storage.listSharedClients();
+        // Merge: own clients that are not shared + all shared (deduplicated)
+        const ownIds = new Set(own.map((c) => c.id));
+        const combined = [
+          ...own,
+          ...shared.filter((c) => !ownIds.has(c.id)),
+        ];
+        return res.json(combined);
       }
-      // Fallback: return all if not logged in (backwards compat)
       const all = await storage.listClients();
       return res.json(all);
     } catch (err: any) {
@@ -154,6 +160,7 @@ export async function registerRoutes(
       const parsed = insertClientSchema.safeParse({
         ...req.body,
         userId: user?.id ?? null,
+        shared: req.body.shared ?? false,
         createdAt: req.body.createdAt ?? new Date().toISOString(),
       });
       if (!parsed.success) {

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -33,6 +33,7 @@ export type User = typeof users.$inferSelect;
 export const clients = pgTable("clients", {
   id: serial("id").primaryKey(),
   userId: integer("user_id"),
+  shared: boolean("shared").notNull().default(false),
   name: text("name").notNull(),
   domain: text("domain"),
   industry: text("industry"),

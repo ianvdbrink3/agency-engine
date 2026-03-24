@@ -8,6 +8,8 @@ import {
   Globe,
   FolderOpen,
   ArrowRight,
+  Users,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +35,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import type { Client } from "@shared/schema";
 
 const newClientSchema = z.object({
@@ -40,6 +43,7 @@ const newClientSchema = z.object({
   domain: z.string().optional(),
   industry: z.string().optional(),
   notes: z.string().optional(),
+  shared: z.boolean().optional().default(false),
 });
 
 type NewClientForm = z.infer<typeof newClientSchema>;
@@ -101,6 +105,7 @@ export default function Clients() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const { data: clients, isLoading } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
@@ -123,6 +128,9 @@ export default function Clients() {
         c.domain?.toLowerCase().includes(search.toLowerCase())
       : true
   );
+
+  const myClients = filtered.filter((c) => c.userId === user?.id && !c.shared);
+  const sharedClients = filtered.filter((c) => c.shared);
 
   const form = useForm<NewClientForm>({
     resolver: zodResolver(newClientSchema),
@@ -207,13 +215,52 @@ export default function Clients() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((client) => (
-            <ClientCard
-              key={client.id}
-              client={{ ...client, projectCount: projectCounts.get(client.id) ?? 0 }}
-            />
-          ))}
+        <div className="space-y-8">
+          {/* Mijn klanten */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <User className="w-4 h-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Mijn klanten
+              </h2>
+              <span className="text-xs text-muted-foreground/60">({myClients.length})</span>
+            </div>
+            {myClients.length === 0 ? (
+              <p className="text-sm text-muted-foreground/50 py-4">Nog geen eigen klanten</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {myClients.map((client) => (
+                  <ClientCard
+                    key={client.id}
+                    client={{ ...client, projectCount: projectCounts.get(client.id) ?? 0 }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Gedeelde klanten */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Users className="w-4 h-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Gedeeld met team
+              </h2>
+              <span className="text-xs text-muted-foreground/60">({sharedClients.length})</span>
+            </div>
+            {sharedClients.length === 0 ? (
+              <p className="text-sm text-muted-foreground/50 py-4">Geen gedeelde klanten</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {sharedClients.map((client) => (
+                  <ClientCard
+                    key={client.id}
+                    client={{ ...client, projectCount: projectCounts.get(client.id) ?? 0 }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -279,6 +326,33 @@ export default function Clients() {
                       <Input placeholder="Extra informatie..." {...field} data-testid="dialog-input-notes" />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="shared"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center gap-3 rounded-lg border border-border/60 p-3">
+                      <div className="flex-1">
+                        <FormLabel className="text-sm font-medium cursor-pointer">Delen met team</FormLabel>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Iedereen in het team kan deze klant zien en bewerken
+                        </p>
+                      </div>
+                      <FormControl>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={field.value}
+                          onClick={() => field.onChange(!field.value)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${field.value ? 'bg-primary' : 'bg-muted'}`}
+                        >
+                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-lg ring-0 transition-transform ${field.value ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </button>
+                      </FormControl>
+                    </div>
                   </FormItem>
                 )}
               />

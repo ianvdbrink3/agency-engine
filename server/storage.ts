@@ -93,6 +93,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(clients).where(eq(clients.userId, userId));
   }
 
+  async listSharedClients(): Promise<Client[]> {
+    return db.select().from(clients).where(eq(clients.shared, true));
+  }
+
   async getClient(id: number): Promise<Client | undefined> {
     const rows = await db.select().from(clients).where(eq(clients.id, id));
     return rows[0];
