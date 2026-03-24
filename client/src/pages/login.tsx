@@ -41,8 +41,8 @@ export default function LoginPage() {
             alt="Clickwave"
             width="240"
             height="54"
-            className="mx-auto brightness-0 dark:brightness-100 dark:invert-0 invert"
-            style={{ objectFit: "contain" }}
+            className="mx-auto"
+            style={{ objectFit: "contain", filter: "invert(1)" }}
           />
           <p className="text-sm font-semibold tracking-[0.25em] uppercase text-muted-foreground">THIJO</p>
         </div>
