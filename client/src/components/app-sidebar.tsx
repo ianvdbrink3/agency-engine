@@ -9,6 +9,7 @@ import {
   Building2,
   Settings,
   Trash2,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -39,6 +40,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTheme } from "@/components/theme-provider";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import type { Client } from "@shared/schema";
 
 const NAV_ITEMS = [
@@ -64,6 +66,7 @@ export function AppSidebar() {
   const [location, navigate] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
+  const { user, logout } = useAuth();
 
   const { data: clients, isLoading: clientsLoading } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
@@ -223,7 +226,27 @@ export function AppSidebar() {
       </SidebarContent>
 
       {/* Footer */}
-      <SidebarFooter className="p-3 border-t border-sidebar-border">
+      <SidebarFooter className="p-3 border-t border-sidebar-border space-y-2">
+        {user && (
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+                {(user.displayName || user.username).charAt(0).toUpperCase()}
+              </div>
+              <span className="text-xs text-sidebar-foreground/70 truncate max-w-[100px]">
+                {user.displayName || user.username}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { logout(); navigate("/"); }}
+              className="h-7 w-7 p-0 text-sidebar-foreground/40 hover:text-sidebar-foreground"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -243,11 +266,6 @@ export function AppSidebar() {
             </>
           )}
         </Button>
-        <div className="mt-2 px-1">
-          <span className="text-[10px] text-sidebar-foreground/30">
-            THIJO Marketing Tool
-          </span>
-        </div>
       </SidebarFooter>
     </Sidebar>
   );

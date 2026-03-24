@@ -7,6 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider, useAuth } from "@/lib/auth";
+import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Clients from "@/pages/clients";
@@ -29,21 +31,43 @@ function AppRouter() {
   );
 }
 
+function AuthenticatedApp() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return (
+    <Router hook={useHashLocation}>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset className="flex-1 min-h-screen overflow-auto">
+          <AppRouter />
+        </SidebarInset>
+      </SidebarProvider>
+    </Router>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router hook={useHashLocation}>
-            <SidebarProvider>
-              <AppSidebar />
-              <SidebarInset className="flex-1 min-h-screen overflow-auto">
-                <AppRouter />
-              </SidebarInset>
-            </SidebarProvider>
-          </Router>
-        </TooltipProvider>
+        <AuthProvider>
+          <TooltipProvider>
+            <Toaster />
+            <AuthenticatedApp />
+          </TooltipProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

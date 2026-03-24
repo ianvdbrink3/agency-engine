@@ -9,6 +9,7 @@ import {
   insertIntakeSchema,
 } from "@shared/schema";
 import { z } from "zod";
+import crypto from "crypto";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,41 @@ function parseJsonArray(value: string | null | undefined): string[] {
   }
 }
 
+function hashPassword(password: string): string {
+  return crypto.createHash("sha256").update(password).digest("hex");
+}
+
+// Simple token-based auth (stored in memory, works with serverless)
+// In production you'd use JWT, but this is simple and works
+const TOKEN_HEADER = "x-auth-token";
+
+async function getUserFromRequest(req: Request): Promise<{ id: number; username: string; displayName: string | null } | null> {
+  const token = req.headers[TOKEN_HEADER] as string;
+  if (!token) return null;
+  // Token format: base64(userId:hashedPassword)
+  try {
+    const decoded = Buffer.from(token, "base64").toString("utf-8");
+    const [userIdStr, hash] = decoded.split(":");
+    const userId = parseInt(userIdStr, 10);
+    if (isNaN(userId)) return null;
+    const user = await storage.getUser(userId);
+    if (!user || user.password !== hash) return null;
+    return { id: user.id, username: user.username, displayName: user.displayName };
+  } catch {
+    return null;
+  }
+}
+
+function requireAuth(req: Request, res: Response): Promise<{ id: number; username: string; displayName: string | null } | null> {
+  return getUserFromRequest(req).then((user) => {
+    if (!user) {
+      res.status(401).json({ message: "Niet ingelogd" });
+      return null;
+    }
+    return user;
+  });
+}
+
 // ─── Route Registration ────────────────────────────────────────────────────────
 
 export async function registerRoutes(
@@ -36,11 +72,74 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // ── Auth ──────────────────────────────────────────────────────────────────
+
+  // POST /api/auth/register — create account
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
+    try {
+      const { username, password, displayName } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ message: "Gebruikersnaam en wachtwoord zijn verplicht" });
+      }
+      if (password.length < 4) {
+        return res.status(400).json({ message: "Wachtwoord moet minimaal 4 tekens zijn" });
+      }
+      const existing = await storage.getUserByUsername(username);
+      if (existing) {
+        return res.status(409).json({ message: "Gebruikersnaam is al bezet" });
+      }
+      const hashed = hashPassword(password);
+      const user = await storage.createUser({ username, password: hashed, displayName: displayName || username });
+      const token = Buffer.from(`${user.id}:${hashed}`).toString("base64");
+      return res.status(201).json({
+        user: { id: user.id, username: user.username, displayName: user.displayName },
+        token,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
+  // POST /api/auth/login — login
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ message: "Gebruikersnaam en wachtwoord zijn verplicht" });
+      }
+      const user = await storage.getUserByUsername(username);
+      const hashed = hashPassword(password);
+      if (!user || user.password !== hashed) {
+        return res.status(401).json({ message: "Ongeldige gebruikersnaam of wachtwoord" });
+      }
+      const token = Buffer.from(`${user.id}:${hashed}`).toString("base64");
+      return res.json({
+        user: { id: user.id, username: user.username, displayName: user.displayName },
+        token,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
+  // GET /api/auth/me — get current user
+  app.get("/api/auth/me", async (req: Request, res: Response) => {
+    const user = await getUserFromRequest(req);
+    if (!user) return res.status(401).json({ message: "Niet ingelogd" });
+    return res.json({ user });
+  });
+
   // ── Clients ────────────────────────────────────────────────────────────────
 
-  // GET /api/clients — list all clients
-  app.get("/api/clients", async (_req: Request, res: Response) => {
+  // GET /api/clients — list clients for current user
+  app.get("/api/clients", async (req: Request, res: Response) => {
     try {
+      const user = await getUserFromRequest(req);
+      if (user) {
+        const all = await storage.listClientsByUser(user.id);
+        return res.json(all);
+      }
+      // Fallback: return all if not logged in (backwards compat)
       const all = await storage.listClients();
       return res.json(all);
     } catch (err: any) {
@@ -51,8 +150,10 @@ export async function registerRoutes(
   // POST /api/clients — create client
   app.post("/api/clients", async (req: Request, res: Response) => {
     try {
+      const user = await getUserFromRequest(req);
       const parsed = insertClientSchema.safeParse({
         ...req.body,
+        userId: user?.id ?? null,
         createdAt: req.body.createdAt ?? new Date().toISOString(),
       });
       if (!parsed.success) {
