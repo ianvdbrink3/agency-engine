@@ -490,7 +490,7 @@ export async function registerRoutes(
     try {
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ message: "Invalid project ID" });
-      const type = (req.body.type ?? "both") as "seo" | "sea" | "both";
+      const type = ((req.body && req.body.type) || "both") as "seo" | "sea" | "both";
 
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ message: "Project not found" });
