@@ -5,7 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Key, Globe, Brain, Save, Eye, EyeOff, CheckCircle2, Link2, Copy, RefreshCw, Users, Lock, Unlock } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { Settings, Key, Globe, Brain, Save, Eye, EyeOff, CheckCircle2, Link2, Copy, RefreshCw, Users, Lock, Unlock, Trash2 } from "lucide-react";
 
 interface SettingEntry {
   key: string;
@@ -14,6 +15,7 @@ interface SettingEntry {
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAnthropicKey, setShowAnthropicKey] = useState(false);
@@ -330,13 +332,42 @@ export default function SettingsPage() {
                     {(member.displayName || member.email || "?").charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{member.displayName || "Onbekend"}</p>
+                    <p className="text-sm font-medium truncate">
+                      {member.displayName || "Onbekend"}
+                      {currentUser && member.id === currentUser.id && (
+                        <span className="text-xs text-muted-foreground ml-1.5">(jij)</span>
+                      )}
+                    </p>
                     <p className="text-xs text-muted-foreground truncate">{member.email || member.displayName}</p>
                   </div>
                   {member.createdAt && (
                     <p className="text-xs text-muted-foreground shrink-0">
                       {new Date(member.createdAt).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" })}
                     </p>
+                  )}
+                  {(!currentUser || member.id !== currentUser.id) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 shrink-0"
+                      onClick={async () => {
+                        if (!confirm(`Weet je zeker dat je ${member.displayName || member.email} wilt verwijderen?`)) return;
+                        try {
+                          const res = await fetch(`/api/users/${member.id}`, { method: "DELETE" });
+                          if (res.ok) {
+                            setTeamMembers((prev) => prev.filter((m) => m.id !== member.id));
+                            toast({ title: "Gebruiker verwijderd" });
+                          } else {
+                            const data = await res.json();
+                            toast({ title: "Fout", description: data.message, variant: "destructive" });
+                          }
+                        } catch {
+                          toast({ title: "Fout", description: "Kon gebruiker niet verwijderen", variant: "destructive" });
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   )}
                 </div>
               ))}

@@ -163,6 +163,24 @@ export async function registerRoutes(
     }
   });
 
+  // DELETE /api/users/:id — delete a user
+  app.delete("/api/users/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ message: "Invalid user ID" });
+      const currentUser = await getUserFromRequest(req);
+      if (currentUser && currentUser.id === id) {
+        return res.status(400).json({ message: "Je kunt jezelf niet verwijderen" });
+      }
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "Gebruiker niet gevonden" });
+      await storage.deleteUser(id);
+      return res.json({ message: "Gebruiker verwijderd" });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
   // ── Clients ────────────────────────────────────────────────────────────────
 
   // GET /api/clients — list own clients + shared clients
