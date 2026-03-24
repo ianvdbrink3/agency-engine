@@ -293,7 +293,7 @@ async function callClaude(prompt: string): Promise<any> {
 
   const response = await client.messages.create({
     model,
-    max_tokens: 8000,
+    max_tokens: 4096,
     messages: [
       {
         role: "user",
@@ -331,22 +331,24 @@ export async function generateStrategyWithClaude(
 ): Promise<GeneratedStrategy> {
   console.log(`[Claude] Generating strategy for ${intake.companyName} with ${keywords.length} keywords...`);
 
-  // Step 1: SEO strategy
-  console.log("[Claude] Step 1/3: SEO strategy...");
-  const seoResult = await callClaude(buildSeoPrompt(intake, keywords));
+  // Limit keywords sent to Claude to avoid token bloat
+  const topKeywords = keywords.slice(0, 30);
 
-  // Step 2: SEA strategy
-  console.log("[Claude] Step 2/3: SEA strategy...");
-  const seaResult = await callClaude(buildSeaPrompt(intake, keywords));
+  // Step 1: Run SEO and SEA in PARALLEL to save time
+  console.log("[Claude] Step 1/2: SEO + SEA strategy (parallel)...");
+  const [seoResult, seaResult] = await Promise.all([
+    callClaude(buildSeoPrompt(intake, topKeywords)),
+    callClaude(buildSeaPrompt(intake, topKeywords)),
+  ]);
 
-  // Step 3: Executive summary with full context
-  console.log("[Claude] Step 3/3: Executive summary...");
+  // Step 2: Quick summary (uses smaller context)
+  console.log("[Claude] Step 2/2: Executive summary...");
   const summaryResult = await callClaude(
     buildSummaryPrompt(
       intake,
-      keywords,
-      JSON.stringify(seoResult.clusters?.slice(0, 5) ?? []),
-      JSON.stringify(seaResult.campaigns?.slice(0, 5) ?? [])
+      topKeywords,
+      JSON.stringify((seoResult.clusters ?? []).slice(0, 3).map((c: any) => c.name)),
+      JSON.stringify((seaResult.campaigns ?? []).slice(0, 3).map((c: any) => c.name))
     )
   );
 
