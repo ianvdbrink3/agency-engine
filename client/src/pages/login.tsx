@@ -34,17 +34,17 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-2">
+      <div className="w-full max-w-sm space-y-8">
+        <div className="text-center space-y-3">
           <img
             src="/logo-clickwave.png"
             alt="Clickwave"
-            width="160"
-            height="36"
+            width="240"
+            height="54"
             className="mx-auto brightness-0 dark:brightness-100 dark:invert-0 invert"
             style={{ objectFit: "contain" }}
           />
-          <p className="text-xs text-muted-foreground tracking-[0.2em] uppercase">THIJO</p>
+          <p className="text-sm font-semibold tracking-[0.25em] uppercase text-muted-foreground">THIJO</p>
         </div>
 
         <Card className="border border-border/60">
