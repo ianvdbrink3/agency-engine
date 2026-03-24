@@ -51,7 +51,7 @@ function buildSeoPrompt(intake: Intake, keywords: KeywordEntry[]): string {
 - Diensten/producten: ${services}
 - Concurrenten: ${intake.competitors ?? "onbekend"}
 
-## KEYWORD DATA (${keywords.length} zoekwoorden van DataForSEO)
+## KEYWORD DATA (${keywords.length > 0 ? keywords.length + " zoekwoorden van DataForSEO" : "Geen externe data - genereer zelf relevante keywords"})
 ${keywords.map(k => `${k.keyword} (vol:${k.volume}, kd:${k.difficulty}, cpc:${k.cpc})`).join("\n")}
 
 ## OPDRACHT
@@ -223,66 +223,17 @@ BELANGRIJK: Headlines en descriptions moeten in het Nederlands, specifiek voor $
 }
 
 function buildSummaryPrompt(intake: Intake, keywords: KeywordEntry[], seoJson: string, seaJson: string): string {
-  const totalVolume = keywords.reduce((s, k) => s + k.volume, 0);
-  const avgDiff = Math.round(keywords.reduce((s, k) => s + k.difficulty, 0) / (keywords.length || 1));
-  const avgCpc = (keywords.reduce((s, k) => s + k.cpc, 0) / (keywords.length || 1)).toFixed(2);
+  return `Schrijf een kort strategisch rapport voor ${intake.companyName} (${intake.industry ?? "onbekend"}, ${intake.businessModel ?? "onbekend"}, ${intake.region ?? "Nederland"}).
+SEO clusters: ${seoJson}. SEA campagnes: ${seaJson}. Budget: €${intake.adBudget ?? "1000"}/maand.
 
-  return `Je bent een senior marketing consultant die een strategisch rapport schrijft voor het managementteam van ${intake.companyName}.
-
-## KLANTPROFIEL
-- Bedrijf: ${intake.companyName}
-- Website: ${intake.domain ?? "onbekend"}
-- Sector: ${intake.industry ?? "onbekend"}
-- Business model: ${intake.businessModel ?? "onbekend"}
-- Regio: ${intake.region ?? intake.country ?? "Nederland"}
-- Budget: €${intake.adBudget ?? "1000"}/maand
-- Diensten: ${intake.productsServices ?? "onbekend"}
-
-## DATA SAMENVATTING
-- ${keywords.length} zoekwoorden geanalyseerd
-- Totaal zoekvolume: ${totalVolume.toLocaleString("nl-NL")}/maand
-- Gemiddelde moeilijkheid: ${avgDiff}/100
-- Gemiddelde CPC: €${avgCpc}
-
-## OPDRACHT
-Schrijf een professioneel strategisch rapport. Geen AI-taal, geen disclaimers. Schrijf alsof je een senior consultant bent die dit rapport aan de directie presenteert.
-
-Genereer ALLEEN een valid JSON object (geen markdown, geen backticks):
-
+Genereer ALLEEN valid JSON (geen markdown):
 {
-  "executiveSummary": "string (3-4 alinea's, professioneel Nederlands, met concrete cijfers en aanbevelingen specifiek voor ${intake.companyName}. Gebruik \\n\\n voor nieuwe alinea's.)",
-  "keyFindings": ["string (8-12 concrete, data-gedreven bevindingen specifiek voor ${intake.companyName})"],
-  "recommendations": ["string (10 concrete, geprioriteerde aanbevelingen — begin elke aanbeveling met een actiewerkwoord)"],
-  "implementationChecklist": [
-    {
-      "task": "string (concrete taak)",
-      "category": "Technische SEO" | "On-page SEO" | "Off-page SEO" | "SEA Setup" | "SEA Optimalisatie" | "Content" | "Rapportage" | "Conversie",
-      "priority": "high" | "medium" | "low",
-      "status": "pending",
-      "aiNote": "string (waarom dit belangrijk is voor ${intake.companyName})"
-    }
-  ],
-  "performanceEstimates": [
-    {
-      "metric": "string",
-      "current": "string",
-      "month3": "string",
-      "month6": "string",
-      "month12": "string",
-      "confidence": "hoog" | "gemiddeld" | "laag"
-    }
-  ],
-  "aiStrategicInsights": [
-    {
-      "title": "string (pakkende titel)",
-      "insight": "string (2-3 zinnen, concreet en actionable)",
-      "impact": "high" | "medium" | "low",
-      "category": "kans" | "risico" | "trend" | "quick-win"
-    }
-  ]
-}
-
-BELANGRIJK: Alles moet specifiek zijn voor ${intake.companyName}. Geen generieke marketing adviezen.`;
+  "executiveSummary": "string (2 alinea's, professioneel Nederlands, specifiek voor ${intake.companyName})",
+  "keyFindings": ["string (5-6 bevindingen)"],
+  "recommendations": ["string (5-6 aanbevelingen)"],
+  "implementationChecklist": [{"task":"string","category":"string","priority":"high|medium|low","status":"pending"}],
+  "performanceEstimates": [{"metric":"string","current":"string","month3":"string","month6":"string","month12":"string","confidence":"hoog|gemiddeld|laag"}]
+}`;
 }
 
 // ─── Claude API Call ──────────────────────────────────────────────────────────
@@ -293,7 +244,7 @@ async function callClaude(prompt: string): Promise<any> {
 
   const response = await client.messages.create({
     model,
-    max_tokens: 4096,
+    max_tokens: 3000,
     messages: [
       {
         role: "user",

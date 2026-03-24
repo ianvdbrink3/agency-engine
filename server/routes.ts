@@ -501,15 +501,26 @@ export async function registerRoutes(
       await storage.updateProjectStatus(id, "processing");
 
       try {
-        const focusServices = parseJsonArray(intake.focusServices);
-        const keywords = await gatherKeywordsForIntake({
-          domain: intake.domain,
-          focusServices,
-          companyName: intake.companyName,
-          industry: intake.industry,
-          country: intake.country,
-          language: intake.language,
-        });
+        // Try to get keywords from DataForSEO with a 10s timeout
+        let keywords: any[] = [];
+        try {
+          const focusServices = parseJsonArray(intake.focusServices);
+          const keywordPromise = gatherKeywordsForIntake({
+            domain: intake.domain,
+            focusServices,
+            companyName: intake.companyName,
+            industry: intake.industry,
+            country: intake.country,
+            language: intake.language,
+          });
+          const timeoutPromise = new Promise<any[]>((_, reject) =>
+            setTimeout(() => reject(new Error("DataForSEO timeout")), 10000)
+          );
+          keywords = await Promise.race([keywordPromise, timeoutPromise]);
+        } catch (e) {
+          console.log("[Generate] DataForSEO skipped or failed, Claude will generate keywords:", (e as Error).message);
+          // Empty keywords - Claude will generate its own
+        }
 
         const strategy = await generateStrategyWithClaude(intake, keywords, type);
 
