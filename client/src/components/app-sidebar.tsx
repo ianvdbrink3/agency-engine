@@ -10,6 +10,7 @@ import {
   Settings,
   Trash2,
   LogOut,
+  User,
 } from "lucide-react";
 import {
   Sidebar,
@@ -85,6 +86,53 @@ export function AppSidebar() {
   });
 
   const recentClients = clients?.slice(0, 5) ?? [];
+  const myClients = recentClients.filter((c) => c.userId === user?.id && !c.shared);
+  const sharedClients = recentClients.filter((c) => c.shared);
+
+  function ClientItem({ client }: { client: Client }) {
+    const isActive = location === `/clients/${client.id}`;
+    return (
+      <SidebarMenuItem>
+        <div className="flex items-center w-full">
+          <SidebarMenuButton
+            asChild
+            isActive={isActive}
+            className="gap-2 flex-1"
+            data-testid={`nav-client-${client.id}`}
+          >
+            <Link href={`/clients/${client.id}`}>
+              <Building2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate text-sm">{client.name}</span>
+            </Link>
+          </SidebarMenuButton>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button className="flex items-center justify-center w-6 h-6 rounded text-sidebar-foreground/20 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 mr-1">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Klant verwijderen?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Weet je zeker dat je <strong>{client.name}</strong> wilt verwijderen?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuleren</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteMutation.mutate(client.id)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Verwijderen
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </SidebarMenuItem>
+    );
+  }
 
   return (
     <Sidebar
@@ -138,15 +186,16 @@ export function AppSidebar() {
 
         <SidebarSeparator className="my-2" />
 
-        {/* Recent clients */}
+        {/* Mijn klanten */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 px-2 mb-1">
-            Recente klanten
+            <User className="w-3 h-3 inline mr-1.5" />
+            Mijn klanten
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {clientsLoading &&
-                Array.from({ length: 3 }).map((_, i) => (
+                Array.from({ length: 2 }).map((_, i) => (
                   <SidebarMenuItem key={i}>
                     <div className="flex items-center gap-2 px-2 py-1.5">
                       <Skeleton className="w-5 h-5 rounded bg-sidebar-accent" />
@@ -154,60 +203,57 @@ export function AppSidebar() {
                     </div>
                   </SidebarMenuItem>
                 ))}
-              {!clientsLoading && recentClients.length === 0 && (
+              {!clientsLoading && myClients.length === 0 && (
                 <SidebarMenuItem>
                   <p className="text-xs text-sidebar-foreground/40 px-2 py-1.5">
-                    Nog geen klanten
+                    Nog geen eigen klanten
                   </p>
                 </SidebarMenuItem>
               )}
-              {recentClients.map((client) => {
-                const isActive = location === `/clients/${client.id}`;
-                return (
-                  <SidebarMenuItem key={client.id}>
-                    <div className="flex items-center w-full">
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isActive}
-                        className="gap-2 flex-1"
-                        data-testid={`nav-client-${client.id}`}
-                      >
-                        <Link href={`/clients/${client.id}`}>
-                          <Building2 className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate text-sm">{client.name}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <button
-                            className="flex items-center justify-center w-6 h-6 rounded text-sidebar-foreground/20 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 mr-1"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Klant verwijderen?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Weet je zeker dat je <strong>{client.name}</strong> wilt verwijderen?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Annuleren</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deleteMutation.mutate(client.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              Verwijderen
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+              {myClients.map((client) => (
+                <ClientItem key={client.id} client={client} />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator className="my-2" />
+
+        {/* Gedeeld met team */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 px-2 mb-1">
+            <Users className="w-3 h-3 inline mr-1.5" />
+            Gedeeld met team
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {clientsLoading &&
+                Array.from({ length: 2 }).map((_, i) => (
+                  <SidebarMenuItem key={`shared-${i}`}>
+                    <div className="flex items-center gap-2 px-2 py-1.5">
+                      <Skeleton className="w-5 h-5 rounded bg-sidebar-accent" />
+                      <Skeleton className="h-3 w-24 bg-sidebar-accent" />
                     </div>
                   </SidebarMenuItem>
-                );
-              })}
-              {!clientsLoading && recentClients.length > 0 && (
+                ))}
+              {!clientsLoading && sharedClients.length === 0 && (
+                <SidebarMenuItem>
+                  <p className="text-xs text-sidebar-foreground/40 px-2 py-1.5">
+                    Geen gedeelde klanten
+                  </p>
+                </SidebarMenuItem>
+              )}
+              {sharedClients.map((client) => (
+                <ClientItem key={client.id} client={client} />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {!clientsLoading && (myClients.length > 0 || sharedClients.length > 0) && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
@@ -219,10 +265,10 @@ export function AppSidebar() {
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       {/* Footer */}
