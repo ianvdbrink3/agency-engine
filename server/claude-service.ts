@@ -52,7 +52,7 @@ function buildSeoPrompt(intake: Intake, keywords: KeywordEntry[]): string {
 - Concurrenten: ${intake.competitors ?? "onbekend"}
 
 ## KEYWORD DATA (${keywords.length} zoekwoorden van DataForSEO)
-${JSON.stringify(keywords.slice(0, 60), null, 2)}
+${keywords.map(k => `${k.keyword} (vol:${k.volume}, kd:${k.difficulty}, cpc:${k.cpc})`).join("\n")}
 
 ## OPDRACHT
 Analyseer deze data als een senior SEO-lead. Denk in:
@@ -154,7 +154,7 @@ function buildSeaPrompt(intake: Intake, keywords: KeywordEntry[]): string {
 - Conversietype: ${intake.conversionType ?? "lead"}
 
 ## KEYWORD DATA (${keywords.length} zoekwoorden)
-${JSON.stringify(keywords.slice(0, 60), null, 2)}
+${keywords.map(k => `${k.keyword} (vol:${k.volume}, kd:${k.difficulty}, cpc:${k.cpc})`).join("\n")}
 
 ## OPDRACHT — SEA-FIRST MINDSET
 Ontwerp een complete Google Ads strategie alsof je morgen live gaat. Denk in:
@@ -309,11 +309,20 @@ async function callClaude(prompt: string): Promise<any> {
 
   const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
 
+  // Try to find JSON in the response if it's wrapped in other text
+  let jsonStr = cleaned;
+  const jsonStart = cleaned.indexOf("{");
+  const jsonEnd = cleaned.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+    jsonStr = cleaned.substring(jsonStart, jsonEnd + 1);
+  }
+
   try {
-    return JSON.parse(cleaned);
+    return JSON.parse(jsonStr);
   } catch (e) {
-    console.error("[Claude] Failed to parse JSON response:", cleaned.substring(0, 500));
-    throw new Error("Claude gaf een ongeldig antwoord. Probeer het opnieuw.");
+    console.error("[Claude] Failed to parse JSON. First 1000 chars:", jsonStr.substring(0, 1000));
+    console.error("[Claude] Parse error:", (e as Error).message);
+    throw new Error(`Claude gaf een ongeldig antwoord. Model: ${model}. Probeer het opnieuw of switch naar een ander model in Instellingen.`);
   }
 }
 
