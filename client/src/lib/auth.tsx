@@ -11,7 +11,7 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string, displayName: string) => Promise<void>;
+  register: (username: string, password: string, displayName: string, inviteCode?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -82,11 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(USER_KEY, JSON.stringify(data.user));
   }, [token]);
 
-  const register = useCallback(async (username: string, password: string, displayName: string) => {
+  const register = useCallback(async (username: string, password: string, displayName: string, inviteCode?: string) => {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, displayName }),
+      body: JSON.stringify({ username, password, displayName, inviteCode }),
     });
     if (!res.ok) {
       const data = await res.json();

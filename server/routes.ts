@@ -74,16 +74,29 @@ export async function registerRoutes(
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
-  // POST /api/auth/register — create account
+  // POST /api/auth/register — create account (requires invite code)
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const { username, password, displayName } = req.body;
+      const { username, password, displayName, inviteCode } = req.body;
       if (!username || !password) {
         return res.status(400).json({ message: "Gebruikersnaam en wachtwoord zijn verplicht" });
       }
       if (password.length < 4) {
         return res.status(400).json({ message: "Wachtwoord moet minimaal 4 tekens zijn" });
       }
+
+      // Check invite code — stored in settings as "invite_code"
+      const storedCode = await storage.getSetting("invite_code");
+      if (storedCode && storedCode !== inviteCode) {
+        return res.status(403).json({ message: "Ongeldige uitnodigingscode" });
+      }
+      // If no invite code is set yet, allow registration (first user / setup)
+      if (!storedCode) {
+        // Auto-generate invite code after first user registers
+        const code = crypto.randomBytes(6).toString("hex");
+        await storage.setSetting("invite_code", code);
+      }
+
       const existing = await storage.getUserByUsername(username);
       if (existing) {
         return res.status(409).json({ message: "Gebruikersnaam is al bezet" });

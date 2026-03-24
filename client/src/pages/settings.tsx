@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Key, Globe, Brain, Save, Eye, EyeOff, CheckCircle2, AlertCircle } from "lucide-react";
+import { Settings, Key, Globe, Brain, Save, Eye, EyeOff, CheckCircle2, AlertCircle, Link2, Copy, RefreshCw } from "lucide-react";
 
 interface SettingEntry {
   key: string;
@@ -27,6 +27,8 @@ export default function SettingsPage() {
   const [defaultLanguage, setDefaultLanguage] = useState("Nederlands");
   const [defaultRegion, setDefaultRegion] = useState("");
   const [aiModel, setAiModel] = useState("claude-sonnet-4-20250514");
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   // Track which fields have been saved
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
@@ -57,6 +59,7 @@ export default function SettingsPage() {
         if (map.has("default_language")) setDefaultLanguage(map.get("default_language")!);
         if (map.has("default_region")) setDefaultRegion(map.get("default_region")!);
         if (map.has("ai_model")) setAiModel(map.get("ai_model")!);
+        if (map.has("invite_code")) setInviteCode(map.get("invite_code")!);
       }
     } catch (err) {
       console.error("Failed to load settings:", err);
@@ -310,6 +313,79 @@ export default function SettingsPage() {
               onChange={(e) => setDefaultRegion(e.target.value)}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Invite Link */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Link2 className="h-5 w-5 text-emerald-500" />
+            <CardTitle>Team uitnodigen</CardTitle>
+          </div>
+          <CardDescription>
+            Deel deze link met collega's zodat zij een account kunnen aanmaken.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {inviteCode ? (
+            <>
+              <div className="space-y-2">
+                <Label>Uitnodigingslink</Label>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={`${window.location.origin}?invite=${inviteCode}`}
+                    className="flex-1 font-mono text-xs"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 shrink-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}?invite=${inviteCode}`);
+                      setInviteCopied(true);
+                      setTimeout(() => setInviteCopied(false), 2000);
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    {inviteCopied ? "Gekopieerd!" : "Kopieer"}
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Uitnodigingscode</Label>
+                <div className="flex gap-2">
+                  <Input readOnly value={inviteCode} className="flex-1 font-mono" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 shrink-0"
+                    onClick={async () => {
+                      const newCode = Math.random().toString(36).substring(2, 14);
+                      await fetch("/api/settings", {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify([{ key: "invite_code", value: newCode }]),
+                      });
+                      setInviteCode(newCode);
+                      toast({ title: "Nieuwe code gegenereerd", description: "De oude link werkt niet meer." });
+                    }}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Vernieuw
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Vernieuw de code als je de toegang wilt intrekken voor nieuwe registraties.
+                </p>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              De uitnodigingscode wordt automatisch aangemaakt wanneer je voor het eerst een account registreert.
+            </p>
+          )}
         </CardContent>
       </Card>
 

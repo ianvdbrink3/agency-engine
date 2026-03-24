@@ -8,10 +8,18 @@ import { LogIn, UserPlus } from "lucide-react";
 
 export default function LoginPage() {
   const { login, register } = useAuth();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(() => {
+    // If URL has ?invite=..., start in register mode
+    const params = new URLSearchParams(window.location.search);
+    return params.has("invite") ? "register" : "login";
+  });
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [inviteCode, setInviteCode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("invite") ?? "";
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -23,7 +31,7 @@ export default function LoginPage() {
       if (mode === "login") {
         await login(username, password);
       } else {
-        await register(username, password, displayName || username);
+        await register(username, password, displayName || username, inviteCode);
       }
     } catch (err: any) {
       setError(err.message || "Er ging iets mis");
@@ -96,6 +104,22 @@ export default function LoginPage() {
                   autoComplete={mode === "login" ? "current-password" : "new-password"}
                 />
               </div>
+
+              {mode === "register" && (
+                <div className="space-y-2">
+                  <Label htmlFor="inviteCode">Uitnodigingscode</Label>
+                  <Input
+                    id="inviteCode"
+                    placeholder="Code van je beheerder"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Je hebt een uitnodigingslink of code nodig om een account aan te maken
+                  </p>
+                </div>
+              )}
 
               {error && (
                 <p className="text-sm text-destructive">{error}</p>
