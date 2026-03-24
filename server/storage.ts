@@ -85,6 +85,10 @@ export class DatabaseStorage implements IStorage {
     return rows[0];
   }
 
+  async listUsers(): Promise<User[]> {
+    return db.select().from(users);
+  }
+
   async listClients(): Promise<Client[]> {
     return db.select().from(clients);
   }

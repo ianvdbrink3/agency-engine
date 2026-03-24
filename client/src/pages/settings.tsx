@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Key, Globe, Brain, Save, Eye, EyeOff, CheckCircle2, AlertCircle, Link2, Copy, RefreshCw } from "lucide-react";
+import { Settings, Key, Globe, Brain, Save, Eye, EyeOff, CheckCircle2, AlertCircle, Link2, Copy, RefreshCw, Users } from "lucide-react";
 
 interface SettingEntry {
   key: string;
@@ -29,6 +29,7 @@ export default function SettingsPage() {
   const [aiModel, setAiModel] = useState("claude-sonnet-4-20250514");
   const [inviteCode, setInviteCode] = useState("");
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<{ id: number; email: string; displayName: string; createdAt: string }[]>([]);
 
   // Track which fields have been saved
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
@@ -65,6 +66,17 @@ export default function SettingsPage() {
       console.error("Failed to load settings:", err);
     } finally {
       setLoading(false);
+    }
+
+    // Load team members
+    try {
+      const usersRes = await fetch("/api/users");
+      if (usersRes.ok) {
+        const users = await usersRes.json();
+        setTeamMembers(users);
+      }
+    } catch (err) {
+      console.error("Failed to load team members:", err);
     }
   }
 
@@ -388,6 +400,41 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Team Members */}
+      {teamMembers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-500" />
+              <CardTitle>Teamleden ({teamMembers.length})</CardTitle>
+            </div>
+            <CardDescription>
+              Alle geregistreerde gebruikers van de tool.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {teamMembers.map((member) => (
+                <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg border border-border/60">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                    {(member.displayName || member.email || "?").charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{member.displayName || "Onbekend"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{member.email || member.displayName}</p>
+                  </div>
+                  {member.createdAt && (
+                    <p className="text-xs text-muted-foreground shrink-0">
+                      {new Date(member.createdAt).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Save Button */}
       <div className="flex justify-end pt-4">

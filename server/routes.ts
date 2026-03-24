@@ -77,9 +77,9 @@ export async function registerRoutes(
   // POST /api/auth/register — create account (requires invite code)
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const { username, password, displayName, inviteCode } = req.body;
-      if (!username || !password) {
-        return res.status(400).json({ message: "Gebruikersnaam en wachtwoord zijn verplicht" });
+      const { email, password, displayName, inviteCode } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ message: "E-mailadres en wachtwoord zijn verplicht" });
       }
       if (password.length < 4) {
         return res.status(400).json({ message: "Wachtwoord moet minimaal 4 tekens zijn" });
@@ -90,22 +90,27 @@ export async function registerRoutes(
       if (storedCode && storedCode !== inviteCode) {
         return res.status(403).json({ message: "Ongeldige uitnodigingscode" });
       }
-      // If no invite code is set yet, allow registration (first user / setup)
       if (!storedCode) {
-        // Auto-generate invite code after first user registers
         const code = crypto.randomBytes(6).toString("hex");
         await storage.setSetting("invite_code", code);
       }
 
-      const existing = await storage.getUserByUsername(username);
+      // Use email as username
+      const existing = await storage.getUserByUsername(email);
       if (existing) {
-        return res.status(409).json({ message: "Gebruikersnaam is al bezet" });
+        return res.status(409).json({ message: "Dit e-mailadres is al geregistreerd" });
       }
       const hashed = hashPassword(password);
-      const user = await storage.createUser({ username, password: hashed, displayName: displayName || username });
+      const user = await storage.createUser({
+        username: email,
+        email,
+        password: hashed,
+        displayName: displayName || email.split("@")[0],
+        createdAt: new Date().toISOString(),
+      });
       const token = Buffer.from(`${user.id}:${hashed}`).toString("base64");
       return res.status(201).json({
-        user: { id: user.id, username: user.username, displayName: user.displayName },
+        user: { id: user.id, username: user.username, email: user.email, displayName: user.displayName },
         token,
       });
     } catch (err: any) {
@@ -113,21 +118,21 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/auth/login — login
+  // POST /api/auth/login — login (accepts email or username)
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const { username, password } = req.body;
       if (!username || !password) {
-        return res.status(400).json({ message: "Gebruikersnaam en wachtwoord zijn verplicht" });
+        return res.status(400).json({ message: "E-mailadres en wachtwoord zijn verplicht" });
       }
       const user = await storage.getUserByUsername(username);
       const hashed = hashPassword(password);
       if (!user || user.password !== hashed) {
-        return res.status(401).json({ message: "Ongeldige gebruikersnaam of wachtwoord" });
+        return res.status(401).json({ message: "Ongeldig e-mailadres of wachtwoord" });
       }
       const token = Buffer.from(`${user.id}:${hashed}`).toString("base64");
       return res.json({
-        user: { id: user.id, username: user.username, displayName: user.displayName },
+        user: { id: user.id, username: user.username, email: user.email, displayName: user.displayName },
         token,
       });
     } catch (err: any) {
@@ -140,6 +145,22 @@ export async function registerRoutes(
     const user = await getUserFromRequest(req);
     if (!user) return res.status(401).json({ message: "Niet ingelogd" });
     return res.json({ user });
+  });
+
+  // GET /api/users — list all team members (no passwords)
+  app.get("/api/users", async (req: Request, res: Response) => {
+    try {
+      const all = await storage.listUsers();
+      return res.json(all.map((u) => ({
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        displayName: u.displayName,
+        createdAt: u.createdAt,
+      })));
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
   });
 
   // ── Clients ────────────────────────────────────────────────────────────────
