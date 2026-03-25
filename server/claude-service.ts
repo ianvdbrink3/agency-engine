@@ -50,7 +50,12 @@ function buildSeoPrompt(intake: Intake, keywords: KeywordEntry[]): string {
 - Regio: ${region}
 - Diensten/producten: ${services}
 - Concurrenten: ${intake.competitors ?? "onbekend"}
+${intake.extraContext ? `
+## KLANTENKAART / EXTRA CONTEXT
+${intake.extraContext}
 
+BELANGRIJK: Gebruik de klantenkaart als PRIMAIRE bron. Analyseer de inhoud proactief — adviseer ook campagnes en kansen die de klant zelf niet heeft bedacht.
+` : ""}
 ## KEYWORD DATA (${keywords.length > 0 ? keywords.length + " zoekwoorden van DataForSEO" : "Geen externe data - genereer zelf relevante keywords"})
 ${keywords.map(k => `${k.keyword} (vol:${k.volume}, kd:${k.difficulty}, cpc:${k.cpc})`).join("\n")}
 
