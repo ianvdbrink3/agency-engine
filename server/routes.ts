@@ -485,7 +485,7 @@ export async function registerRoutes(
 
   // ── Generate Strategy ──────────────────────────────────────────────────────
 
-  // POST /api/projects/:id/prepare — gather intake + keywords, return data for client-side Claude call
+  // POST /api/projects/:id/prepare — gather intake + keywords (NO api key exposed)
   app.post("/api/projects/:id/prepare", async (req: Request, res: Response) => {
     try {
       const id = parseId(req.params.id);
@@ -497,7 +497,7 @@ export async function registerRoutes(
       const intake = await storage.getIntakeData(id);
       if (!intake) return res.status(422).json({ message: "Intake data required" });
 
-      // Get API key for client-side Claude call
+      // Verify API key exists (don't send it to client)
       const dbKey = await storage.getSetting("anthropic_api_key");
       const apiKey = dbKey || process.env.ANTHROPIC_API_KEY;
       if (!apiKey) return res.status(400).json({ message: "Anthropic API key niet ingesteld. Ga naar Instellingen." });
@@ -527,9 +527,50 @@ export async function registerRoutes(
 
       await storage.updateProjectStatus(id, "processing");
 
-      return res.json({ intake, keywords, apiKey, model });
+      // Return intake + keywords + model, but NOT the API key
+      return res.json({ intake, keywords, model });
     } catch (err: any) {
       return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
+  // POST /api/claude-proxy — secure proxy for Claude API calls (key stays server-side)
+  app.post("/api/claude-proxy", async (req: Request, res: Response) => {
+    try {
+      const { prompt, model: requestedModel } = req.body;
+      if (!prompt) return res.status(400).json({ message: "Prompt is verplicht" });
+
+      const dbKey = await storage.getSetting("anthropic_api_key");
+      const apiKey = dbKey || process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) return res.status(400).json({ message: "Anthropic API key niet ingesteld" });
+
+      const dbModel = await storage.getSetting("ai_model");
+      const model = requestedModel || dbModel || "claude-sonnet-4-20250514";
+
+      // Stream-style: use fetch to call Anthropic with no timeout on our side
+      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 4096,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      if (!claudeRes.ok) {
+        const errText = await claudeRes.text();
+        return res.status(claudeRes.status).json({ message: `Claude API fout: ${errText}` });
+      }
+
+      const data = await claudeRes.json();
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Claude proxy error" });
     }
   });
 
@@ -707,12 +748,17 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/settings/:key — get single setting
+  // GET /api/settings/:key — get single setting (blocks sensitive keys)
   app.get("/api/settings/:key", async (req: Request, res: Response) => {
     try {
-      const value = await storage.getSetting(req.params.key);
+      const key = req.params.key;
+      // Block direct access to sensitive keys
+      if (key.includes("api_key") || key.includes("password")) {
+        return res.status(403).json({ message: "Sensitive settings cannot be read directly" });
+      }
+      const value = await storage.getSetting(key);
       if (value === undefined) return res.status(404).json({ message: "Setting not found" });
-      return res.json({ key: req.params.key, value });
+      return res.json({ key, value });
     } catch (err: any) {
       return res.status(500).json({ message: err.message ?? "Internal server error" });
     }

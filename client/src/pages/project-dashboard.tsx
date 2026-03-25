@@ -72,7 +72,7 @@ export default function ProjectDashboard() {
       // Step 1: Get intake data + API key from backend
       setGenerateStatus("Data ophalen...");
       const prepRes = await apiRequest("POST", `/api/projects/${projectId}/prepare`);
-      const { intake: intakeData, keywords, apiKey, model } = await prepRes.json();
+      const { intake: intakeData, keywords, model } = await prepRes.json();
 
       // Build compact keyword string
       const kwStr = (keywords || []).slice(0, 30).map((k: any) =>
@@ -82,23 +82,14 @@ export default function ProjectDashboard() {
       const clientInfo = `Bedrijf: ${intakeData.companyName}, Website: ${intakeData.domain ?? "onbekend"}, Sector: ${intakeData.industry ?? "onbekend"}, Model: ${intakeData.businessModel ?? "onbekend"}, Regio: ${intakeData.region ?? intakeData.country ?? "Nederland"}, Diensten: ${intakeData.productsServices ?? "onbekend"}, Budget: €${intakeData.adBudget ?? "1000"}/maand, Concurrenten: ${intakeData.competitors ?? "onbekend"}`;
 
       async function callClaude(prompt: string) {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
+        const res = await fetch("/api/claude-proxy", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-            "anthropic-dangerous-direct-browser-access": "true",
-          },
-          body: JSON.stringify({
-            model,
-            max_tokens: 4096,
-            messages: [{ role: "user", content: prompt }],
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, model }),
         });
         if (!res.ok) {
-          const err = await res.text();
-          throw new Error(`Claude API fout: ${err}`);
+          const err = await res.json().catch(() => ({ message: res.statusText }));
+          throw new Error(err.message || `Claude proxy fout: ${res.status}`);
         }
         const data = await res.json();
         const text = data.content?.map((b: any) => b.text || "").join("") || "";
