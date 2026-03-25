@@ -181,6 +181,25 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/auth/claude-key — get Claude API key for authenticated users only (one-time use)
+  app.post("/api/auth/claude-key", async (req: Request, res: Response) => {
+    try {
+      const user = await getUserFromRequest(req);
+      if (!user) return res.status(401).json({ message: "Niet ingelogd" });
+
+      const dbKey = await storage.getSetting("anthropic_api_key");
+      const apiKey = dbKey || process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) return res.status(400).json({ message: "Anthropic API key niet ingesteld. Ga naar Instellingen." });
+
+      const dbModel = await storage.getSetting("ai_model");
+      const model = dbModel || "claude-sonnet-4-20250514";
+
+      return res.json({ key: apiKey, model });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
   // ── Clients ────────────────────────────────────────────────────────────────
 
   // GET /api/clients — list own clients + shared clients
