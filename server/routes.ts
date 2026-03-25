@@ -485,79 +485,87 @@ export async function registerRoutes(
 
   // ── Generate Strategy ──────────────────────────────────────────────────────
 
-  // POST /api/projects/:id/generate — triggers strategy generation (type: seo, sea, or both)
-  app.post("/api/projects/:id/generate", async (req: Request, res: Response) => {
+  // POST /api/projects/:id/prepare — gather intake + keywords, return data for client-side Claude call
+  app.post("/api/projects/:id/prepare", async (req: Request, res: Response) => {
     try {
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ message: "Invalid project ID" });
-      const type = ((req.body && req.body.type) || "both") as "seo" | "sea" | "both";
 
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ message: "Project not found" });
 
       const intake = await storage.getIntakeData(id);
-      if (!intake) return res.status(422).json({ message: "Intake data required before generating strategy" });
+      if (!intake) return res.status(422).json({ message: "Intake data required" });
+
+      // Get API key for client-side Claude call
+      const dbKey = await storage.getSetting("anthropic_api_key");
+      const apiKey = dbKey || process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) return res.status(400).json({ message: "Anthropic API key niet ingesteld. Ga naar Instellingen." });
+
+      const dbModel = await storage.getSetting("ai_model");
+      const model = dbModel || "claude-sonnet-4-20250514";
+
+      // Try to get keywords (quick, with timeout)
+      let keywords: any[] = [];
+      try {
+        const focusServices = parseJsonArray(intake.focusServices);
+        const keywordPromise = gatherKeywordsForIntake({
+          domain: intake.domain,
+          focusServices,
+          companyName: intake.companyName,
+          industry: intake.industry,
+          country: intake.country,
+          language: intake.language,
+        });
+        const timeoutPromise = new Promise<any[]>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 15000)
+        );
+        keywords = await Promise.race([keywordPromise, timeoutPromise]);
+      } catch (e) {
+        console.log("[Prepare] DataForSEO skipped:", (e as Error).message);
+      }
 
       await storage.updateProjectStatus(id, "processing");
 
-      try {
-        // Try to get keywords from DataForSEO with a 10s timeout
-        let keywords: any[] = [];
-        try {
-          const focusServices = parseJsonArray(intake.focusServices);
-          const keywordPromise = gatherKeywordsForIntake({
-            domain: intake.domain,
-            focusServices,
-            companyName: intake.companyName,
-            industry: intake.industry,
-            country: intake.country,
-            language: intake.language,
-          });
-          const timeoutPromise = new Promise<any[]>((_, reject) =>
-            setTimeout(() => reject(new Error("DataForSEO timeout")), 10000)
-          );
-          keywords = await Promise.race([keywordPromise, timeoutPromise]);
-        } catch (e) {
-          console.log("[Generate] DataForSEO skipped or failed, Claude will generate keywords:", (e as Error).message);
-          // Empty keywords - Claude will generate its own
-        }
-
-        const strategy = await generateStrategyWithClaude(intake, keywords, type);
-
-        // Upsert SEO data (if generated)
-        if (strategy.seo) {
-          const existingSeo = await storage.getSeoData(id);
-          if (existingSeo) { await storage.updateSeoData(id, strategy.seo); }
-          else { await storage.createSeoData(strategy.seo); }
-        }
-
-        // Upsert SEA data (if generated)
-        if (strategy.sea) {
-          const existingSea = await storage.getSeaData(id);
-          if (existingSea) { await storage.updateSeaData(id, strategy.sea); }
-          else { await storage.createSeaData(strategy.sea); }
-        }
-
-        // Upsert summary (always generated)
-        if (strategy.summary) {
-          const existingSummary = await storage.getStrategySummary(id);
-          if (existingSummary) { await storage.updateStrategySummary(id, strategy.summary); }
-          else { await storage.createStrategySummary(strategy.summary); }
-        }
-
-        const updatedProject = await storage.updateProjectStatus(id, "completed");
-
-        return res.json({
-          message: "Strategy generated successfully",
-          project: updatedProject,
-          keywordCount: keywords.length,
-          type,
-        });
-      } catch (genErr: any) {
-        await storage.updateProjectStatus(id, "intake");
-        throw genErr;
-      }
+      return res.json({ intake, keywords, apiKey, model });
     } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
+  // POST /api/projects/:id/save-strategy — save Claude results from client
+  app.post("/api/projects/:id/save-strategy", async (req: Request, res: Response) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ message: "Invalid project ID" });
+
+      const { seo, sea, summary } = req.body;
+
+      if (seo) {
+        const seoData = { projectId: id, ...seo };
+        const existing = await storage.getSeoData(id);
+        if (existing) { await storage.updateSeoData(id, seoData); }
+        else { await storage.createSeoData(seoData); }
+      }
+
+      if (sea) {
+        const seaData = { projectId: id, ...sea };
+        const existing = await storage.getSeaData(id);
+        if (existing) { await storage.updateSeaData(id, seaData); }
+        else { await storage.createSeaData(seaData); }
+      }
+
+      if (summary) {
+        const summaryData = { projectId: id, ...summary };
+        const existing = await storage.getStrategySummary(id);
+        if (existing) { await storage.updateStrategySummary(id, summaryData); }
+        else { await storage.createStrategySummary(summaryData); }
+      }
+
+      await storage.updateProjectStatus(id, "completed");
+      return res.json({ message: "Strategy saved successfully" });
+    } catch (err: any) {
+      await storage.updateProjectStatus(parseId(req.params.id) ?? 0, "intake");
       return res.status(500).json({ message: err.message ?? "Internal server error" });
     }
   });

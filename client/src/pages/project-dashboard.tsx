@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import {
@@ -64,10 +65,116 @@ export default function ProjectDashboard() {
     enabled: !!projectId,
   });
 
+  const [generateStatus, setGenerateStatus] = useState("");
+
   const generateMutation = useMutation({
     mutationFn: async (type: "seo" | "sea" | "both") => {
-      const res = await apiRequest("POST", `/api/projects/${projectId}/generate`, { type });
-      return res.json();
+      // Step 1: Get intake data + API key from backend
+      setGenerateStatus("Data ophalen...");
+      const prepRes = await apiRequest("POST", `/api/projects/${projectId}/prepare`);
+      const { intake: intakeData, keywords, apiKey, model } = await prepRes.json();
+
+      // Build compact keyword string
+      const kwStr = (keywords || []).slice(0, 30).map((k: any) =>
+        `${k.keyword} (vol:${k.volume}, kd:${k.difficulty}, cpc:${k.cpc})`
+      ).join("\n");
+
+      const clientInfo = `Bedrijf: ${intakeData.companyName}, Website: ${intakeData.domain ?? "onbekend"}, Sector: ${intakeData.industry ?? "onbekend"}, Model: ${intakeData.businessModel ?? "onbekend"}, Regio: ${intakeData.region ?? intakeData.country ?? "Nederland"}, Diensten: ${intakeData.productsServices ?? "onbekend"}, Budget: €${intakeData.adBudget ?? "1000"}/maand, Concurrenten: ${intakeData.competitors ?? "onbekend"}`;
+
+      async function callClaude(prompt: string) {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 4096,
+            messages: [{ role: "user", content: prompt }],
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          throw new Error(`Claude API fout: ${err}`);
+        }
+        const data = await res.json();
+        const text = data.content?.map((b: any) => b.text || "").join("") || "";
+        const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+        const jsonStart = cleaned.indexOf("{");
+        const jsonEnd = cleaned.lastIndexOf("}");
+        if (jsonStart === -1 || jsonEnd === -1) throw new Error("Geen JSON in Claude response");
+        return JSON.parse(cleaned.substring(jsonStart, jsonEnd + 1));
+      }
+
+      let seo = null;
+      let sea = null;
+
+      // Step 2: Call Claude from browser (no timeout!)
+      if (type === "seo" || type === "both") {
+        setGenerateStatus("SEO strategie genereren...");
+        seo = await callClaude(`Je bent een senior SEO-strateeg. Genereer een complete SEO-strategie voor deze klant.
+${clientInfo}
+Keywords: ${kwStr || "Genereer zelf relevante keywords voor deze klant."}
+
+Antwoord ALLEEN met valid JSON:
+{"keywords":[{"keyword":"string","volume":0,"difficulty":0,"cpc":0,"intent":"commercial","category":"primary","cluster":"string","opportunityScore":80,"funnelPhase":"consideration","aiInsight":"string"}],"clusters":[{"name":"string","pillarKeyword":"string","keywords":[{"keyword":"string","volume":0,"difficulty":0,"cpc":0,"intent":"string","category":"string"}],"totalVolume":0,"avgDifficulty":0,"intent":"string","aiAnalysis":"string"}],"pillarPages":[{"title":"string","slug":"string","pillarKeyword":"string","clusterPages":[{"title":"string","slug":"string","keyword":"string"}],"totalVolume":0,"contentBrief":"string"}],"contentIdeas":[{"title":"string","type":"landing","keyword":"string","intent":"string","estimatedWords":1000,"priority":"high","aiRationale":"string"}],"internalLinks":[{"from":"string","to":"string","anchorText":"string","type":"pillar-to-cluster"}],"metadata":[{"page":"string","keyword":"string","titleTag":"string","metaDescription":"string","h1":"string","urlSlug":"string"}],"priorityMatrix":[{"keyword":"string","volume":0,"difficulty":0,"cpc":0,"intent":"string","priority":"quick-win","effort":"low","impact":"high","recommendation":"string"}]}`);
+      }
+
+      if (type === "sea" || type === "both") {
+        setGenerateStatus("SEA strategie genereren...");
+        sea = await callClaude(`Je bent een elite Google Ads specialist. Ontwerp een complete SEA-strategie.
+${clientInfo}
+Keywords: ${kwStr || "Genereer zelf relevante keywords."}
+
+Antwoord ALLEEN met valid JSON:
+{"campaigns":[{"name":"string","type":"Search","objective":"string","budget":0,"budgetPercent":0,"adGroups":[{"name":"string","keywords":[{"keyword":"string","matchType":"Exact","volume":0}],"headlines":["string"],"descriptions":["string"],"landingPage":"string"}],"aiInsight":"string"}],"negativeKeywords":["string"],"adCopy":{"campaigns":[]},"budgetAllocation":[{"campaign":"string","budget":0,"percentage":0,"rationale":"string"}],"landingPages":[{"url":"string","campaign":"string","headline":"string","cta":"string","conversionGoal":"string","elements":["string"]}],"bidStrategy":[{"campaign":"string","strategy":"string","targetCpa":null,"rationale":"string","phaseIn":"string"}]}`);
+      }
+
+      setGenerateStatus("Samenvatting genereren...");
+      const summary = await callClaude(`Schrijf een kort strategisch rapport voor ${intakeData.companyName} (${intakeData.industry ?? "onbekend"}).
+Antwoord ALLEEN met valid JSON:
+{"executiveSummary":"string","keyFindings":["string"],"recommendations":["string"],"implementationChecklist":[{"task":"string","category":"string","priority":"high","status":"pending"}],"performanceEstimates":[{"metric":"string","current":"string","month3":"string","month6":"string","month12":"string","confidence":"gemiddeld"}]}`);
+
+      // Step 3: Save results to backend
+      setGenerateStatus("Opslaan...");
+      const saveBody: any = { summary: {
+        executiveSummary: summary.executiveSummary ?? "",
+        keyFindings: JSON.stringify(summary.keyFindings ?? []),
+        recommendations: JSON.stringify(summary.recommendations ?? []),
+        implementationChecklist: JSON.stringify(summary.implementationChecklist ?? []),
+        performanceEstimates: JSON.stringify(summary.performanceEstimates ?? []),
+      }};
+
+      if (seo) {
+        saveBody.seo = {
+          keywords: JSON.stringify(seo.keywords ?? []),
+          clusters: JSON.stringify(seo.clusters ?? []),
+          pillarPages: JSON.stringify(seo.pillarPages ?? []),
+          contentIdeas: JSON.stringify(seo.contentIdeas ?? []),
+          internalLinks: JSON.stringify(seo.internalLinks ?? []),
+          metadata: JSON.stringify(seo.metadata ?? []),
+          priorityMatrix: JSON.stringify(seo.priorityMatrix ?? []),
+        };
+      }
+
+      if (sea) {
+        saveBody.sea = {
+          campaigns: JSON.stringify(sea.campaigns ?? []),
+          adGroups: JSON.stringify((sea.campaigns ?? []).flatMap((c: any) => c.adGroups ?? [])),
+          negativeKeywords: JSON.stringify(sea.negativeKeywords ?? []),
+          adCopy: JSON.stringify(sea.adCopy ?? {}),
+          budgetAllocation: JSON.stringify(sea.budgetAllocation ?? []),
+          landingPages: JSON.stringify(sea.landingPages ?? []),
+          bidStrategy: JSON.stringify(sea.bidStrategy ?? []),
+        };
+      }
+
+      await apiRequest("POST", `/api/projects/${projectId}/save-strategy`, saveBody);
+      setGenerateStatus("");
+      return { success: true };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
@@ -80,6 +187,7 @@ export default function ProjectDashboard() {
       });
     },
     onError: (err: Error) => {
+      setGenerateStatus("");
       toast({
         title: "Fout bij genereren",
         description: err.message,
@@ -177,7 +285,7 @@ export default function ProjectDashboard() {
           {generateMutation.isPending ? (
             <Button disabled className="gap-2">
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Genereren...
+              {generateStatus || "Genereren..."}
             </Button>
           ) : (
             <>
