@@ -199,7 +199,8 @@ Antwoord ALLEEN als valid JSON:
         };
       }
 
-      await Promise.all([
+      // Save to both endpoints — dashboard save may fail if table doesn't exist yet
+      await Promise.allSettled([
         apiRequest("POST", `/api/projects/${projectId}/save-dashboard`, saveBody),
         apiRequest("POST", `/api/projects/${projectId}/save-strategy`, oldSaveBody),
       ]);
@@ -207,9 +208,11 @@ Antwoord ALLEEN als valid JSON:
       return { success: true };
     },
     onSuccess: () => {
-      ["/api/projects", "/api/projects/" + projectId, "/api/projects/" + projectId + "/strategy-dashboard", "/api/projects/" + projectId + "/seo", "/api/projects/" + projectId + "/sea", "/api/projects/" + projectId + "/summary"].forEach(k => queryClient.invalidateQueries({ queryKey: k.split("/").filter(Boolean).map(s => s.startsWith("api") ? "/" + s : s) }));
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "strategy-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "seo"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "sea"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "summary"] });
       toast({ title: "Dashboard gegenereerd", description: "Het strategiedashboard is succesvol aangemaakt." });
     },
     onError: (err: Error) => { setGenerateStatus(""); toast({ title: "Fout bij genereren", description: err.message, variant: "destructive" }); },

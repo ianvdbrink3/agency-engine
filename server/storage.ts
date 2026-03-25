@@ -35,6 +35,28 @@ import { eq } from "drizzle-orm";
 const sql = neon(process.env.database_DATABASE_URL || process.env.DATABASE_URL!);
 const db = drizzle(sql);
 
+// Auto-create strategy_dashboard table if not exists
+(async () => {
+  try {
+    await sql`CREATE TABLE IF NOT EXISTS strategy_dashboard (
+      id SERIAL PRIMARY KEY,
+      project_id INTEGER NOT NULL UNIQUE,
+      overview TEXT NOT NULL,
+      seo_keywords TEXT NOT NULL,
+      pillar_cluster TEXT NOT NULL,
+      sea_campaigns TEXT NOT NULL,
+      ad_copy TEXT NOT NULL,
+      negatives TEXT NOT NULL,
+      targeting TEXT NOT NULL,
+      performance TEXT NOT NULL,
+      checklist TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )`;
+  } catch (e) {
+    console.warn("strategy_dashboard table creation skipped:", (e as Error).message);
+  }
+})();
+
 // ─── Interface ──────────────────────────────────────────────────────────────
 
 export interface IStorage {
