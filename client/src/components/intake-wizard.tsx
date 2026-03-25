@@ -36,6 +36,8 @@ import {
   ChevronLeft,
   X,
   Plus,
+  Upload,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -652,9 +654,25 @@ export function IntakeWizard({ clientId }: IntakeWizardProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
+  const [klantenkaart, setKlantenkaart] = useState<File | null>(null);
+  const [klantenkaartText, setKlantenkaartText] = useState<string>("");
+  const hasKlantenkaart = !!klantenkaart;
+
   const [step1Data, setStep1Data] = useState<Step1Data | null>(null);
   const [step2Data, setStep2Data] = useState<Step2Data | null>(null);
   const [step3Data, setStep3Data] = useState<Step3Data | null>(null);
+
+  // Read uploaded file as text
+  async function handleFileUpload(file: File) {
+    setKlantenkaart(file);
+    try {
+      const text = await file.text();
+      setKlantenkaartText(text);
+    } catch {
+      // For non-text files, store filename as context
+      setKlantenkaartText(`[Bestand: ${file.name}, type: ${file.type}, grootte: ${(file.size / 1024).toFixed(0)}KB]`);
+    }
+  }
 
   const createProjectMutation = useMutation({
     mutationFn: async (step4: Step4Data) => {
@@ -730,7 +748,10 @@ export function IntakeWizard({ clientId }: IntakeWizardProps) {
                 .filter(Boolean)
             )
           : null,
-        extraContext: step4.extraContext ?? null,
+        extraContext: [
+          klantenkaartText ? `[KLANTENKAART]\n${klantenkaartText}\n[/KLANTENKAART]` : "",
+          step4.extraContext ?? "",
+        ].filter(Boolean).join("\n\n") || null,
       };
 
       await apiRequest("POST", "/api/intake", intakePayload);
@@ -758,6 +779,52 @@ export function IntakeWizard({ clientId }: IntakeWizardProps) {
 
   return (
     <div className="max-w-2xl mx-auto" data-testid="intake-wizard">
+      {/* Klantenkaart Upload */}
+      <Card className="border border-border/60 mb-6">
+        <CardContent className="pt-5 pb-5">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+              <FileText className="w-4 h-4 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold">Klantenkaart uploaden</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Upload een klantenkaart en de AI extraheert automatisch alle benodigde informatie. De overige velden worden optioneel.
+              </p>
+              {klantenkaart ? (
+                <div className="mt-3 flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-sm text-emerald-700 dark:text-emerald-400 truncate flex-1">{klantenkaart.name}</span>
+                  <span className="text-xs text-emerald-600/60">{(klantenkaart.size / 1024).toFixed(0)} KB</span>
+                  <button onClick={() => { setKlantenkaart(null); setKlantenkaartText(""); }} className="text-muted-foreground hover:text-destructive ml-1">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <label className="mt-3 flex items-center justify-center gap-2 p-4 rounded-lg border-2 border-dashed border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer">
+                  <Upload className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Klik om een bestand te uploaden</span>
+                  <input
+                    type="file"
+                    accept=".txt,.pdf,.doc,.docx,.csv,.json,.md"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file);
+                    }}
+                  />
+                </label>
+              )}
+              {hasKlantenkaart && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 font-medium">
+                  Klantenkaart geüpload — alle velden hieronder zijn nu optioneel
+                </p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Step indicator */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">

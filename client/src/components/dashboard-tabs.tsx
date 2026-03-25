@@ -40,52 +40,74 @@ function TabSkeleton() {
 }
 
 export function DashboardTabs({ seoData, seaData, summary, isLoading }: DashboardTabsProps) {
+  const hasSeo = !!seoData;
+  const hasSea = !!seaData;
+  const hasSummary = !!summary;
+
+  // Determine default tab based on available data
+  const defaultTab = hasSeo ? "seo" : hasSea ? "sea" : "summary";
+
   return (
-    <Tabs defaultValue="seo" className="w-full" data-testid="dashboard-tabs">
+    <Tabs defaultValue={defaultTab} className="w-full" data-testid="dashboard-tabs">
       <TabsList className="mb-4 bg-muted/60 border border-border/60">
-        <TabsTrigger value="seo" className="gap-1.5" data-testid="tab-seo">
-          <Search className="w-3.5 h-3.5" />
-          SEO
-        </TabsTrigger>
-        <TabsTrigger value="sea" className="gap-1.5" data-testid="tab-sea">
-          <Target className="w-3.5 h-3.5" />
-          SEA
-        </TabsTrigger>
-        <TabsTrigger value="summary" className="gap-1.5" data-testid="tab-summary">
-          <BookOpen className="w-3.5 h-3.5" />
-          Samenvatting
-        </TabsTrigger>
+        {hasSeo && (
+          <TabsTrigger value="seo" className="gap-1.5" data-testid="tab-seo">
+            <Search className="w-3.5 h-3.5" />
+            SEO
+          </TabsTrigger>
+        )}
+        {hasSea && (
+          <TabsTrigger value="sea" className="gap-1.5" data-testid="tab-sea">
+            <Target className="w-3.5 h-3.5" />
+            SEA
+          </TabsTrigger>
+        )}
+        {hasSummary && (
+          <TabsTrigger value="summary" className="gap-1.5" data-testid="tab-summary">
+            <BookOpen className="w-3.5 h-3.5" />
+            Samenvatting
+          </TabsTrigger>
+        )}
+        {!hasSeo && !hasSea && !hasSummary && (
+          <>
+            <TabsTrigger value="seo" className="gap-1.5"><Search className="w-3.5 h-3.5" />SEO</TabsTrigger>
+            <TabsTrigger value="sea" className="gap-1.5"><Target className="w-3.5 h-3.5" />SEA</TabsTrigger>
+            <TabsTrigger value="summary" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Samenvatting</TabsTrigger>
+          </>
+        )}
       </TabsList>
 
-      <TabsContent value="seo">
-        {isLoading ? (
-          <TabSkeleton />
-        ) : seoData ? (
-          <SeoOverview seoData={seoData} />
-        ) : (
-          <EmptyTabState message="Geen SEO data beschikbaar. Genereer de strategie om te beginnen." />
-        )}
-      </TabsContent>
+      {hasSeo && (
+        <TabsContent value="seo">
+          {isLoading ? <TabSkeleton /> : <SeoOverview seoData={seoData!} />}
+        </TabsContent>
+      )}
 
-      <TabsContent value="sea">
-        {isLoading ? (
-          <TabSkeleton />
-        ) : seaData ? (
-          <SeaOverview seaData={seaData} />
-        ) : (
-          <EmptyTabState message="Geen SEA data beschikbaar. Genereer de strategie om te beginnen." />
-        )}
-      </TabsContent>
+      {hasSea && (
+        <TabsContent value="sea">
+          {isLoading ? <TabSkeleton /> : <SeaOverview seaData={seaData!} />}
+        </TabsContent>
+      )}
 
-      <TabsContent value="summary">
-        {isLoading ? (
-          <TabSkeleton />
-        ) : summary ? (
-          <StrategySummaryView summary={summary} />
-        ) : (
-          <EmptyTabState message="Geen samenvatting beschikbaar. Genereer de strategie om te beginnen." />
-        )}
-      </TabsContent>
+      {hasSummary && (
+        <TabsContent value="summary">
+          {isLoading ? <TabSkeleton /> : <StrategySummaryView summary={summary!} />}
+        </TabsContent>
+      )}
+
+      {!hasSeo && !hasSea && !hasSummary && (
+        <>
+          <TabsContent value="seo">
+            <EmptyTabState message="Geen SEO data beschikbaar. Genereer de strategie om te beginnen." />
+          </TabsContent>
+          <TabsContent value="sea">
+            <EmptyTabState message="Geen SEA data beschikbaar. Genereer de strategie om te beginnen." />
+          </TabsContent>
+          <TabsContent value="summary">
+            <EmptyTabState message="Geen samenvatting beschikbaar. Genereer de strategie om te beginnen." />
+          </TabsContent>
+        </>
+      )}
     </Tabs>
   );
 }
