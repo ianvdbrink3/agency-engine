@@ -497,19 +497,72 @@ function Step3({
           <FormField
             control={form.control}
             name="adBudget"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Advertentiebudget / maand</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="€500 – €2000"
-                    {...field}
-                    data-testid="input-ad-budget"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+            render={({ field }) => {
+              const [budgetPeriod, setBudgetPeriod] = useState<"maand" | "dag">("maand");
+              const displayValue = field.value ?? "";
+
+              function handlePeriodSwitch(newPeriod: "maand" | "dag") {
+                const num = parseFloat(displayValue.replace(/[^0-9.,]/g, "").replace(",", "."));
+                if (!isNaN(num) && num > 0) {
+                  const converted = newPeriod === "dag" ? Math.round(num / 30.4) : Math.round(num * 30.4);
+                  field.onChange(String(converted));
+                }
+                setBudgetPeriod(newPeriod);
+              }
+
+              return (
+                <FormItem>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Advertentiebudget</FormLabel>
+                    <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handlePeriodSwitch("dag")}
+                        className={cn(
+                          "px-2.5 py-0.5 rounded text-[11px] font-medium transition-all",
+                          budgetPeriod === "dag" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        / dag
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePeriodSwitch("maand")}
+                        className={cn(
+                          "px-2.5 py-0.5 rounded text-[11px] font-medium transition-all",
+                          budgetPeriod === "maand" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        / maand
+                      </button>
+                    </div>
+                  </div>
+                  <FormControl>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">€</span>
+                      <Input
+                        placeholder={budgetPeriod === "dag" ? "10 – 50" : "300 – 1500"}
+                        {...field}
+                        className="pl-7"
+                        data-testid="input-ad-budget"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-[11px]">
+                        /{budgetPeriod}
+                      </span>
+                    </div>
+                  </FormControl>
+                  {displayValue && !isNaN(parseFloat(displayValue.replace(/[^0-9.,]/g, "").replace(",", "."))) && (
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {budgetPeriod === "dag"
+                        ? `≈ €${Math.round(parseFloat(displayValue.replace(/[^0-9.,]/g, "").replace(",", ".")) * 30.4).toLocaleString("nl-NL")}/maand`
+                        : `≈ €${Math.round(parseFloat(displayValue.replace(/[^0-9.,]/g, "").replace(",", ".")) / 30.4).toLocaleString("nl-NL")}/dag`
+                      }
+                    </p>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
           />
           <FormField
             control={form.control}
