@@ -45,23 +45,35 @@ export default function ProjectDashboard() {
     enabled: !!project?.clientId,
   });
 
+  // These endpoints return 404 when no data exists yet — catch and return null
+  const nullOn404 = async ({ queryKey }: { queryKey: readonly unknown[] }) => {
+    const res = await fetch(queryKey.join("/"));
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    return res.json();
+  };
+
   const { data: seoData, isLoading: seoLoading } = useQuery<SeoData | null>({
     queryKey: ["/api/projects", projectId, "seo"],
+    queryFn: nullOn404,
     enabled: !!projectId,
   });
 
   const { data: seaData, isLoading: seaLoading } = useQuery<SeaData | null>({
     queryKey: ["/api/projects", projectId, "sea"],
+    queryFn: nullOn404,
     enabled: !!projectId,
   });
 
   const { data: summary, isLoading: summaryLoading } = useQuery<StrategySummary | null>({
     queryKey: ["/api/projects", projectId, "summary"],
+    queryFn: nullOn404,
     enabled: !!projectId,
   });
 
   const { data: intake } = useQuery<Intake | null>({
     queryKey: ["/api/projects", projectId, "intake"],
+    queryFn: nullOn404,
     enabled: !!projectId,
   });
 

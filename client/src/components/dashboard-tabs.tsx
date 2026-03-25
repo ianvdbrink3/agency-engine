@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SeoOverview } from "@/components/seo-overview";
 import { SeaOverview } from "@/components/sea-overview";
@@ -43,32 +44,45 @@ export function DashboardTabs({ seoData, seaData, summary, isLoading }: Dashboar
   const hasSeo = !!seoData;
   const hasSea = !!seaData;
   const hasSummary = !!summary;
+  const hasAnyData = hasSeo || hasSea || hasSummary;
 
-  // Determine default tab based on available data
-  const defaultTab = hasSeo ? "seo" : hasSea ? "sea" : "summary";
+  // Build available tabs list
+  const availableTabs = [];
+  if (hasSeo) availableTabs.push("seo");
+  if (hasSea) availableTabs.push("sea");
+  if (hasSummary) availableTabs.push("summary");
+
+  // Controlled tab state — always falls back to first available tab
+  const [activeTab, setActiveTab] = useState("seo");
+  const safeTab = hasAnyData
+    ? availableTabs.includes(activeTab) ? activeTab : availableTabs[0]
+    : activeTab;
 
   return (
-    <Tabs defaultValue={defaultTab} className="w-full" data-testid="dashboard-tabs">
+    <Tabs value={safeTab} onValueChange={setActiveTab} className="w-full" data-testid="dashboard-tabs">
       <TabsList className="mb-4 bg-muted/60 border border-border/60">
-        {hasSeo && (
-          <TabsTrigger value="seo" className="gap-1.5" data-testid="tab-seo">
-            <Search className="w-3.5 h-3.5" />
-            SEO
-          </TabsTrigger>
-        )}
-        {hasSea && (
-          <TabsTrigger value="sea" className="gap-1.5" data-testid="tab-sea">
-            <Target className="w-3.5 h-3.5" />
-            SEA
-          </TabsTrigger>
-        )}
-        {hasSummary && (
-          <TabsTrigger value="summary" className="gap-1.5" data-testid="tab-summary">
-            <BookOpen className="w-3.5 h-3.5" />
-            Samenvatting
-          </TabsTrigger>
-        )}
-        {!hasSeo && !hasSea && !hasSummary && (
+        {hasAnyData ? (
+          <>
+            {hasSeo && (
+              <TabsTrigger value="seo" className="gap-1.5" data-testid="tab-seo">
+                <Search className="w-3.5 h-3.5" />
+                SEO
+              </TabsTrigger>
+            )}
+            {hasSea && (
+              <TabsTrigger value="sea" className="gap-1.5" data-testid="tab-sea">
+                <Target className="w-3.5 h-3.5" />
+                SEA
+              </TabsTrigger>
+            )}
+            {hasSummary && (
+              <TabsTrigger value="summary" className="gap-1.5" data-testid="tab-summary">
+                <BookOpen className="w-3.5 h-3.5" />
+                Samenvatting
+              </TabsTrigger>
+            )}
+          </>
+        ) : (
           <>
             <TabsTrigger value="seo" className="gap-1.5"><Search className="w-3.5 h-3.5" />SEO</TabsTrigger>
             <TabsTrigger value="sea" className="gap-1.5"><Target className="w-3.5 h-3.5" />SEA</TabsTrigger>
@@ -95,7 +109,7 @@ export function DashboardTabs({ seoData, seaData, summary, isLoading }: Dashboar
         </TabsContent>
       )}
 
-      {!hasSeo && !hasSea && !hasSummary && (
+      {!hasAnyData && (
         <>
           <TabsContent value="seo">
             <EmptyTabState message="Geen SEO data beschikbaar. Genereer de strategie om te beginnen." />

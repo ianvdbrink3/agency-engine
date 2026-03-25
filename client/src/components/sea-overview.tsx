@@ -48,6 +48,9 @@ const MATCH_TYPE_COLORS: Record<string, string> = {
 function AdGroupCard({ group }: { group: AdGroup }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const keywords = Array.isArray(group.keywords) ? group.keywords : [];
+  const headlines = Array.isArray(group.headlines) ? group.headlines : [];
+  const descriptions = Array.isArray(group.descriptions) ? group.descriptions : [];
 
   function copyText(text: string, id: string) {
     navigator.clipboard.writeText(text).then(() => {
@@ -66,9 +69,9 @@ function AdGroupCard({ group }: { group: AdGroup }) {
         >
           <div className="flex items-center gap-2 text-left">
             <Target className="w-3.5 h-3.5 text-primary shrink-0" />
-            <span className="text-sm font-medium">{group.name}</span>
+            <span className="text-sm font-medium">{group.name || "Naamloos"}</span>
             <Badge variant="outline" className="text-[10px] bg-muted/50">
-              {group.keywords.length} zoekwoorden
+              {keywords.length} zoekwoorden
             </Badge>
           </div>
           <ChevronDown
@@ -79,31 +82,35 @@ function AdGroupCard({ group }: { group: AdGroup }) {
       <CollapsibleContent>
         <div className="mt-2 space-y-3 px-1">
           {/* Keywords */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-              Zoekwoorden
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {group.keywords.map((kw, i) => (
-                <Badge
-                  key={i}
-                  variant="outline"
-                  className={cn(
-                    "text-xs border",
-                    MATCH_TYPE_COLORS[kw.matchType?.toLowerCase()] ?? "bg-muted/50 border-border text-muted-foreground"
-                  )}
-                >
-                  {kw.keyword}{" "}
-                  <span className="opacity-60 ml-1 text-[9px]">
-                    ({kw.matchType?.toLowerCase()})
-                  </span>
-                </Badge>
-              ))}
+          {keywords.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Zoekwoorden
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {keywords.map((kw, i) => (
+                  <Badge
+                    key={i}
+                    variant="outline"
+                    className={cn(
+                      "text-xs border",
+                      MATCH_TYPE_COLORS[kw.matchType?.toLowerCase()] ?? "bg-muted/50 border-border text-muted-foreground"
+                    )}
+                  >
+                    {typeof kw === "string" ? kw : kw.keyword}{" "}
+                    {kw.matchType && (
+                      <span className="opacity-60 ml-1 text-[9px]">
+                        ({kw.matchType.toLowerCase()})
+                      </span>
+                    )}
+                  </Badge>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Ad copy */}
-          {group.headlines?.length > 0 && (
+          {headlines.length > 0 && (
             <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -115,7 +122,7 @@ function AdGroupCard({ group }: { group: AdGroup }) {
                   className="h-6 px-2 text-[10px] gap-1"
                   onClick={() =>
                     copyText(
-                      [...group.headlines, "", ...group.descriptions].join("\n"),
+                      [...headlines, "", ...descriptions].join("\n"),
                       group.name
                     )
                   }
@@ -131,16 +138,16 @@ function AdGroupCard({ group }: { group: AdGroup }) {
               </div>
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground font-medium">Koppen:</p>
-                {group.headlines.slice(0, 5).map((h, i) => (
+                {headlines.slice(0, 5).map((h, i) => (
                   <p key={i} className="text-xs">
                     {i + 1}. {h}
                   </p>
                 ))}
               </div>
-              {group.descriptions?.length > 0 && (
+              {descriptions.length > 0 && (
                 <div className="mt-2 space-y-1">
                   <p className="text-xs text-muted-foreground font-medium">Beschrijvingen:</p>
-                  {group.descriptions.slice(0, 3).map((d, i) => (
+                  {descriptions.slice(0, 3).map((d, i) => (
                     <p key={i} className="text-xs">
                       {i + 1}. {d}
                     </p>
