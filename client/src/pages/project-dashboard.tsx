@@ -110,10 +110,35 @@ export default function ProjectDashboard() {
         const data = await res.json();
         const text = data.content?.map((b: any) => b.text || "").join("") || "";
         const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+        
+        // Robust JSON extraction: find { and matching }
         const jsonStart = cleaned.indexOf("{");
-        const jsonEnd = cleaned.lastIndexOf("}");
-        if (jsonStart === -1 || jsonEnd === -1) throw new Error("Geen JSON in Claude response");
-        return JSON.parse(cleaned.substring(jsonStart, jsonEnd + 1));
+        if (jsonStart === -1) throw new Error("Geen JSON in Claude response");
+        
+        let braceCount = 0;
+        let jsonEnd = jsonStart;
+        for (let i = jsonStart; i < cleaned.length; i++) {
+          if (cleaned[i] === "{") braceCount++;
+          if (cleaned[i] === "}") {
+            braceCount--;
+            if (braceCount === 0) {
+              jsonEnd = i;
+              break;
+            }
+          }
+        }
+        
+        if (braceCount !== 0) throw new Error("Ongeldig JSON (ongebalanceerde braces)");
+        
+        const jsonStr = cleaned.substring(jsonStart, jsonEnd + 1);
+        try {
+          return JSON.parse(jsonStr);
+        } catch (e) {
+          console.error("JSON parse failed. Trying to fix common issues...");
+          // Try to fix single quotes and trailing commas
+          let fixed = jsonStr.replace(/'/g, '"').replace(/,\s*}/g, "}").replace(/,\s*\]/g, "]");
+          return JSON.parse(fixed);
+        }
       }
 
       let seo = null;
