@@ -122,35 +122,33 @@ export default function ProjectDashboard() {
       // Step 2: Call Claude from browser (no timeout!)
       if (type === "seo" || type === "both") {
         setGenerateStatus("SEO strategie genereren...");
-        seo = await callClaude(`Je bent een senior SEO-strateeg bij een toonaangevend Nederlands bureau. Genereer een complete, diepgaande SEO-strategie.
+        seo = await callClaude(`Je bent een senior SEO-strateeg. Genereer een SEO-strategie.
 ${clientInfo}${extraContext}
-Keywords: ${kwStr || "Genereer zelf minimaal 20 relevante keywords met realistische volumes voor deze klant en sector."}
+Keywords: ${kwStr || "Genereer 15-20 relevante keywords."}
 
-BELANGRIJK:
-- Groepeer keywords op intentie (Commercial, Informational, Transactional)
-- Koppel elk cluster aan concrete content-ideeën
-- Denk als strategisch adviseur: adviseer ook kansen die de klant zelf niet ziet
-- Genereer minimaal 15 keywords, 4 clusters, 3 pillar pages
-
-Antwoord ALLEEN met valid JSON:
-{"keywords":[{"keyword":"string","volume":0,"difficulty":0,"cpc":0,"intent":"commercial|informational|transactional|navigational","category":"primary|secondary|long-tail","cluster":"string","opportunityScore":80,"funnelPhase":"awareness|consideration|decision","aiInsight":"string"}],"clusters":[{"name":"string","pillarKeyword":"string","keywords":[{"keyword":"string","volume":0,"difficulty":0,"cpc":0,"intent":"string","category":"string"}],"totalVolume":0,"avgDifficulty":0,"intent":"string","aiAnalysis":"string (2-3 zinnen strategische analyse)"}],"pillarPages":[{"title":"string","slug":"string","pillarKeyword":"string","clusterPages":[{"title":"string","slug":"string","keyword":"string"}],"totalVolume":0,"contentBrief":"string (doel, doelgroep, kernboodschap, CTA)"}],"contentIdeas":[{"title":"string","type":"pillar|cluster|blog|landing","keyword":"string","intent":"string","estimatedWords":1000,"priority":"high|medium|low","aiRationale":"string"}],"internalLinks":[{"from":"string","to":"string","anchorText":"string","type":"pillar-to-cluster|cluster-to-pillar|blog-to-landing|cross-cluster"}],"metadata":[{"page":"string","keyword":"string","titleTag":"string (max 60 chars)","metaDescription":"string (max 155 chars)","h1":"string","urlSlug":"string"}],"priorityMatrix":[{"keyword":"string","volume":0,"difficulty":0,"cpc":0,"intent":"string","priority":"quick-win|high-value|long-term|low-priority","effort":"low|medium|high","impact":"low|medium|high","recommendation":"string"}],"conclusion":"string (krachtige conclusie: waarom deze SEO-koers, onderbouwd met data en klantprofiel)"}`);
+Antwoord ALLEEN als valid JSON object (geen markdown, geen backticks):
+{
+  "keywords": [{"keyword": "string", "volume": 0, "difficulty": 0, "intent": "commercial|informational"}],
+  "clusters": [{"name": "string", "keywords": ["keyword1", "keyword2"], "analysis": "string"}],
+  "pillarPages": [{"title": "string", "keyword": "string"}],
+  "contentIdeas": [{"title": "string", "keyword": "string", "priority": "high|medium|low"}],
+  "conclusion": "string"
+}`);
       }
 
       if (type === "sea" || type === "both") {
         setGenerateStatus("SEA strategie genereren...");
-        sea = await callClaude(`Je bent een elite Google Ads specialist die miljoenenbudgetten beheert. Ontwerp een agency-grade SEA-strategie die morgen live kan.
+        sea = await callClaude(`Je bent een Google Ads specialist. Ontwerp een SEA-strategie.
 ${clientInfo}${extraContext}
-Keywords: ${kwStr || "Genereer zelf relevante high-intent keywords voor Google Ads."}
+Budget: €${intakeData.adBudget ?? "1000"}/maand
 
-BELANGRIJK:
-- Denk in conversies, ROAS en schaalbaarheid
-- Structureer campagnes per dienst/thema
-- Schrijf Nederlandse RSA headlines (max 30 chars) en descriptions (max 90 chars)
-- Genereer minimaal 30 negatieve keywords
-- Adviseer ook campagnes die de klant zelf niet had bedacht
-
-Antwoord ALLEEN met valid JSON:
-{"campaigns":[{"name":"string","type":"Search|Display / RLSA|Performance Max","objective":"string","budget":0,"budgetPercent":0,"priority":"high|medium|low","adGroups":[{"name":"string","keywords":[{"keyword":"string","matchType":"Exact|Phrase|Broad","volume":0}],"headlines":["15 Nederlandse headlines max 30 chars"],"descriptions":["4 Nederlandse descriptions max 90 chars"],"landingPage":"string"}],"aiInsight":"string (strategische toelichting, verwachte ROAS)"}],"negativeKeywords":["minimaal 30 negatieve keywords"],"adCopy":{"campaigns":[{"name":"string","adGroups":[{"name":"string","headlines":["string"],"descriptions":["string"]}]}]},"budgetAllocation":[{"campaign":"string","budget":0,"percentage":0,"rationale":"string"}],"landingPages":[{"url":"string","campaign":"string","headline":"string","cta":"string","conversionGoal":"string","elements":["string"],"aiOptimizationTips":"string"}],"bidStrategy":[{"campaign":"string","strategy":"string","targetCpa":null,"targetRoas":null,"rationale":"string","phaseIn":"string"}],"conclusion":"string (waarom deze SEA-strategie, onderbouwd met budget, markt en klantprofiel)"}`);
+Antwoord ALLEEN als valid JSON object (geen markdown, geen backticks):
+{
+  "campaigns": [{"name": "string", "budget": 0, "type": "Search", "adGroups": [{"keywords": ["kw1", "kw2"], "headlines": ["max 30 chars"], "descriptions": ["max 90 chars"]}]}],
+  "negativeKeywords": ["keyword1", "keyword2"],
+  "budgetAllocation": [{"campaign": "string", "percentage": 0, "rationale": "string"}],
+  "conclusion": "string"
+}`);
       }
 
       setGenerateStatus("Samenvatting genereren...");
