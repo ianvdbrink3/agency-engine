@@ -689,6 +689,55 @@ export async function registerRoutes(
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
 
+  // GET /api/projects/:id/strategy-dashboard
+  app.get("/api/projects/:id/strategy-dashboard", async (req: Request, res: Response) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ message: "Invalid project ID" });
+      const dash = await storage.getStrategyDashboard(id);
+      if (!dash) return res.status(404).json({ message: "Strategy dashboard not found" });
+      return res.json(dash);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
+  // POST /api/projects/:id/save-dashboard — save full strategy dashboard from client
+  app.post("/api/projects/:id/save-dashboard", async (req: Request, res: Response) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ message: "Invalid project ID" });
+
+      const { overview, seoKeywords, pillarCluster, seaCampaigns, adCopy, negatives, targeting, performance, checklist } = req.body;
+
+      const dashData = {
+        projectId: id,
+        overview: typeof overview === "string" ? overview : JSON.stringify(overview ?? {}),
+        seoKeywords: typeof seoKeywords === "string" ? seoKeywords : JSON.stringify(seoKeywords ?? []),
+        pillarCluster: typeof pillarCluster === "string" ? pillarCluster : JSON.stringify(pillarCluster ?? []),
+        seaCampaigns: typeof seaCampaigns === "string" ? seaCampaigns : JSON.stringify(seaCampaigns ?? []),
+        adCopy: typeof adCopy === "string" ? adCopy : JSON.stringify(adCopy ?? []),
+        negatives: typeof negatives === "string" ? negatives : JSON.stringify(negatives ?? {}),
+        targeting: typeof targeting === "string" ? targeting : JSON.stringify(targeting ?? {}),
+        performance: typeof performance === "string" ? performance : JSON.stringify(performance ?? {}),
+        checklist: typeof checklist === "string" ? checklist : JSON.stringify(checklist ?? []),
+        createdAt: new Date().toISOString(),
+      };
+
+      const existing = await storage.getStrategyDashboard(id);
+      if (existing) {
+        await storage.updateStrategyDashboard(id, dashData);
+      } else {
+        await storage.createStrategyDashboard(dashData);
+      }
+
+      await storage.updateProjectStatus(id, "completed");
+      return res.json({ message: "Dashboard saved successfully" });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Internal server error" });
+    }
+  });
+
   // GET /api/projects/:id/dashboard — all data combined
   app.get("/api/projects/:id/dashboard", async (req: Request, res: Response) => {
     try {

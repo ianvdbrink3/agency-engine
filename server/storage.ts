@@ -13,6 +13,8 @@ import {
   type InsertSea,
   type StrategySummary,
   type InsertStrategySummary,
+  type StrategyDashboardRow,
+  type InsertStrategyDashboard,
   type Setting,
   users,
   clients,
@@ -21,6 +23,7 @@ import {
   seoData,
   seaData,
   strategySummary,
+  strategyDashboard,
   settings,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/neon-http";
@@ -244,6 +247,23 @@ export class DatabaseStorage implements IStorage {
   async deleteSetting(key: string): Promise<boolean> {
     const rows = await db.delete(settings).where(eq(settings.key, key)).returning();
     return rows.length > 0;
+  }
+
+  // ─── Strategy Dashboard ─────────────────────────────────────────────────
+  async getStrategyDashboard(projectId: number): Promise<StrategyDashboardRow | undefined> {
+    const rows = await db.select().from(strategyDashboard).where(eq(strategyDashboard.projectId, projectId));
+    return rows[0];
+  }
+
+  async createStrategyDashboard(data: InsertStrategyDashboard): Promise<StrategyDashboardRow> {
+    const rows = await db.insert(strategyDashboard).values(data).returning();
+    return rows[0];
+  }
+
+  async updateStrategyDashboard(projectId: number, data: Partial<InsertStrategyDashboard>): Promise<StrategyDashboardRow | undefined> {
+    if (Object.keys(data).length === 0) return this.getStrategyDashboard(projectId);
+    const rows = await db.update(strategyDashboard).set(data).where(eq(strategyDashboard.projectId, projectId)).returning();
+    return rows[0];
   }
 }
 

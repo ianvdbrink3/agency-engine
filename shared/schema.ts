@@ -140,6 +140,26 @@ export const insertStrategySummarySchema = createInsertSchema(strategySummary).o
 export type InsertStrategySummary = z.infer<typeof insertStrategySummarySchema>;
 export type StrategySummary = typeof strategySummary.$inferSelect;
 
+// ─── Strategy Dashboard (full premium output) ───────────
+export const strategyDashboard = pgTable("strategy_dashboard", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().unique(),
+  overview: text("overview").notNull(),           // JSON: KPIs, top keywords, quick wins, summary bullets
+  seoKeywords: text("seo_keywords").notNull(),    // JSON: categorized keyword analysis
+  pillarCluster: text("pillar_cluster").notNull(), // JSON: full pillar-cluster model
+  seaCampaigns: text("sea_campaigns").notNull(),   // JSON: campaigns, ad groups, targeting
+  adCopy: text("ad_copy").notNull(),              // JSON: headlines, descriptions per campaign
+  negatives: text("negatives").notNull(),          // JSON: negative keywords + cross-campaign
+  targeting: text("targeting").notNull(),           // JSON: location, device, schedule, audiences
+  performance: text("performance").notNull(),       // JSON: forecasts + growth plan
+  checklist: text("checklist").notNull(),           // JSON: implementation checklist items
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertStrategyDashboardSchema = createInsertSchema(strategyDashboard).omit({ id: true });
+export type InsertStrategyDashboard = z.infer<typeof insertStrategyDashboardSchema>;
+export type StrategyDashboardRow = typeof strategyDashboard.$inferSelect;
+
 // ─── Shared types for JSON fields ───────────────────────
 export interface KeywordEntry {
   keyword: string;
