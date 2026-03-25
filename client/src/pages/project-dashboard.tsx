@@ -147,32 +147,53 @@ export default function ProjectDashboard() {
       // Step 2: Call Claude from browser (no timeout!)
       if (type === "seo" || type === "both") {
         setGenerateStatus("SEO strategie genereren...");
-        seo = await callClaude(`Je bent een senior SEO-strateeg. Genereer een SEO-strategie.
+        seo = await callClaude(`Je bent een senior SEO-strateeg. Analyseer deze zoekwoorden en bouw een complete SEO-strategie.
+
 ${clientInfo}${extraContext}
-Keywords: ${kwStr || "Genereer 15-20 relevante keywords."}
+
+ZOEKWOORDEN VAN DATAFORSEO (echte marktdata):
+${kwStr || "Geen externe keywords — genereer zelf 15-20 relevante keywords voor deze sector."}
+
+TAAK:
+1. Analyseer ALLE bovenstaande keywords (volume, difficulty, intent)
+2. Groepeer ze in thematische clusters
+3. Definieer pillar pages per cluster
+4. Schrijf content ideeën
+5. Geef strategische conclusie
 
 Antwoord ALLEEN als valid JSON object (geen markdown, geen backticks):
 {
-  "keywords": [{"keyword": "string", "volume": 0, "difficulty": 0, "intent": "commercial|informational"}],
-  "clusters": [{"name": "string", "keywords": ["keyword1", "keyword2"], "analysis": "string"}],
-  "pillarPages": [{"title": "string", "keyword": "string"}],
-  "contentIdeas": [{"title": "string", "keyword": "string", "priority": "high|medium|low"}],
-  "conclusion": "string"
+  "keywords": [{"keyword": "string", "volume": 0, "difficulty": 0, "intent": "commercial|informational", "cluster": "string"}],
+  "clusters": [{"name": "string", "keywords": ["keyword1", "keyword2"], "volume": 0, "analysis": "Waarom deze cluster waardevol is"}],
+  "pillarPages": [{"title": "string", "keyword": "string", "summary": "string"}],
+  "contentIdeas": [{"title": "string", "keyword": "string", "priority": "high|medium|low", "rationale": "string"}],
+  "conclusion": "Waarom deze SEO-strategie juist is voor deze klant en sector"
 }`);
       }
 
       if (type === "sea" || type === "both") {
         setGenerateStatus("SEA strategie genereren...");
-        sea = await callClaude(`Je bent een Google Ads specialist. Ontwerp een SEA-strategie.
+        sea = await callClaude(`Je bent een Google Ads specialist. Ontwerp campagnes rond deze keywords.
+
 ${clientInfo}${extraContext}
 Budget: €${intakeData.adBudget ?? "1000"}/maand
 
+ZOEKWOORDEN VAN DATAFORSEO:
+${kwStr || "Genereer 15-20 high-intent keywords voor Google Ads."}
+
+TAAK:
+1. Selecteer de beste high-intent keywords uit bovenstaande
+2. Groepeer in ad groups per thema
+3. Schrijf headlines en descriptions (Nederlands, max lengths)
+4. Definieer negatieve keywords
+5. Suggereer budget verdeling
+
 Antwoord ALLEEN als valid JSON object (geen markdown, geen backticks):
 {
-  "campaigns": [{"name": "string", "budget": 0, "type": "Search", "adGroups": [{"keywords": ["kw1", "kw2"], "headlines": ["max 30 chars"], "descriptions": ["max 90 chars"]}]}],
+  "campaigns": [{"name": "string", "budget": 0, "keywords": ["kw1", "kw2"], "headlines": ["max 30 chars"], "descriptions": ["max 90 chars"], "analysis": "string"}],
   "negativeKeywords": ["keyword1", "keyword2"],
-  "budgetAllocation": [{"campaign": "string", "percentage": 0, "rationale": "string"}],
-  "conclusion": "string"
+  "budgetAllocation": [{"campaign": "string", "percentage": 0}],
+  "conclusion": "Waarom deze Google Ads strategie werkt voor deze klant"
 }`);
       }
 
