@@ -5,7 +5,8 @@
  * generates strategic insights, classifies intent, clusters keywords,
  * designs campaign architectures, and produces actionable recommendations.
  *
- * Designed for SEA-first thinking with conversion-focused output.
+ * Powered by the Marketing Strategy Engine: senior-level SEO/SEA reasoning,
+ * commercial framing, and directly actionable output.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -17,6 +18,39 @@ import type {
   InsertStrategySummary,
 } from "@shared/schema";
 import { storage } from "./storage";
+
+// ─── System Prompt — Marketing Strategy Engine Persona ───────────────────────
+
+const MARKETING_SYSTEM_PROMPT = `Je bent een world-class senior online marketeer gespecialiseerd in:
+- Technische SEO, on-page SEO, off-page SEO, contentstrategie
+- Zoekintentie-analyse en keyword clustering
+- Lokale SEO en regionale strategie
+- CRO in relatie tot SEO/SEA
+- Google Ads campagnestructuur en SEA-strategie
+- Paid search keyword research, biedstrategieën en advertentieteksten
+- Landingspagina-optimalisatie, budgetverdeling en performance-analyse
+
+Jouw werkwijze:
+1. Denk vanuit bedrijfsdoelstelling naar kanaalstrategie, niet andersom.
+2. Koppel aanbevelingen aan zoekintentie, funnel-fase en conversiefrictie.
+3. Onderscheid quick wins van structureel werk.
+4. Prioriteer op verwachte impact, implementatie-effort en afhankelijkheden.
+5. Geef de reden achter elke aanbeveling in beknopte zakelijke taal.
+
+Kwaliteitslat — vermijd altijd:
+- Lege claims zoals "focus op kwaliteitscontent" zonder te specificeren wat te maken
+- Grote keywordlijsten zonder clustering of prioritering
+- SEA-structuren zonder campagnelogica, match-type denken of budgetonderbouwing
+- SEO-advies dat technische drempels, interne linking of meting negeert
+- Kanaalaanbevelingen die niet terugkoppelen naar bedrijfsdoelstellingen
+
+Produceer altijd output die:
+- Senior-level is in redenering en toon
+- Concreet is in plaats van generiek
+- Direct bruikbaar is door een echt bedrijf
+- Verankerd is in de verstrekte bedrijfscontext
+- Geprioriteerd is (High / Medium / Low)
+- Commercieel realistisch is over effort, volgorde en verwachte uitkomsten`;
 
 // ─── Client ──────────────────────────────────────────────────────────────────
 
@@ -38,8 +72,18 @@ function buildSeoPrompt(intake: Intake, keywords: KeywordEntry[]): string {
   const services = intake.productsServices ?? "onbekend";
   const region = intake.region ?? intake.country ?? "Nederland";
   const model = intake.businessModel ?? "onbekend";
+  const goal = intake.seoGoals ?? "organische groei";
 
-  return `Je bent een senior SEO-strateeg bij een toonaangevend Nederlands performance marketingbureau. Je werkt voor een echte klant en je output moet DIRECT bruikbaar zijn door hun marketingteam.
+  return `## STRATEGISCH KADER
+
+Voordat je de JSON genereert, denk intern (niet in output) door:
+- Hoofddoelstelling: ${goal}
+- Waardevolste zoekdoelgroepen voor ${intake.companyName}
+- Hoogste-intentie kansen in ${intake.industry ?? "deze sector"}
+- Grootste drempels of risico's (technisch, competitief, content-gap)
+- Balans: kortetermijn demand capture vs. langetermijn demand creation
+- Branded vs. non-branded kansen
+- Lokale vs. nationale reikwijdte voor ${region}
 
 ## KLANTPROFIEL
 - Bedrijf: ${intake.companyName}
@@ -50,21 +94,25 @@ function buildSeoPrompt(intake: Intake, keywords: KeywordEntry[]): string {
 - Regio: ${region}
 - Diensten/producten: ${services}
 - Concurrenten: ${intake.competitors ?? "onbekend"}
+- SEO-doelstelling: ${goal}
 ${intake.extraContext ? `
 ## KLANTENKAART / EXTRA CONTEXT
 ${intake.extraContext}
 
-BELANGRIJK: Gebruik de klantenkaart als PRIMAIRE bron. Analyseer de inhoud proactief — adviseer ook campagnes en kansen die de klant zelf niet heeft bedacht.
+BELANGRIJK: Gebruik de klantenkaart als PRIMAIRE bron. Adviseer ook kansen die de klant zelf niet heeft benoemd.
 ` : ""}
-## KEYWORD DATA (${keywords.length > 0 ? keywords.length + " zoekwoorden van DataForSEO" : "Geen externe data - genereer zelf relevante keywords"})
+## KEYWORD DATA (${keywords.length > 0 ? keywords.length + " zoekwoorden van DataForSEO" : "Geen externe data — genereer zelf relevante keywords op basis van de klantsector"})
 ${keywords.map(k => `${k.keyword} (vol:${k.volume}, kd:${k.difficulty}, cpc:${k.cpc})`).join("\n")}
 
-## OPDRACHT
-Analyseer deze data als een senior SEO-lead. Denk in:
-- Welke keywords zijn quick wins (laag KD, goed volume)?
-- Waar liggen de grootste contentkansen voor deze specifieke klant?
-- Hoe bouw je een pillar-cluster model dat past bij hun diensten: ${services}?
-- Welke zoekintentie past bij welke fase in de funnel?
+## OPDRACHT — SEO STRATEGIE
+Analyseer als senior SEO-lead. Verbind elk keyword aan een specifieke funnel-fase en contentkans voor ${intake.companyName}.
+
+Prioriteer op:
+- Quick wins: laag KD (< 30), redelijk volume (> 100/mnd)
+- High-value: hoge transactionele intentie, past bij ${services}
+- Long-term: hoog volume, hoog KD — voor autoriteitsopbouw
+
+Map content altijd aan realistische paginatypes: servicepagina's, vergelijkingspagina's, guides, locatiepagina's, of case studies.
 
 Genereer ALLEEN een valid JSON object (geen markdown, geen uitleg, geen backticks):
 
@@ -78,30 +126,34 @@ Genereer ALLEEN een valid JSON object (geen markdown, geen uitleg, geen backtick
       "intent": "informational" | "navigational" | "transactional" | "commercial",
       "category": "primary" | "secondary" | "long-tail",
       "cluster": "string (thematische groepering specifiek voor ${intake.companyName})",
-      "opportunityScore": number (1-100, hoger = betere kans),
+      "opportunityScore": number,
       "funnelPhase": "awareness" | "consideration" | "decision",
-      "aiInsight": "string (1 zin: waarom dit keyword relevant is voor ${intake.companyName})"
+      "priority": "High" | "Medium" | "Low",
+      "aiInsight": "string (1 zin: commerciële relevantie voor ${intake.companyName})"
     }
   ],
   "clusters": [
     {
-      "name": "string (naam gerelateerd aan diensten van ${intake.companyName})",
+      "name": "string",
       "pillarKeyword": "string",
+      "intent": "string",
+      "funnelPhase": "awareness" | "consideration" | "decision",
       "keywords": [{ "keyword": "string", "volume": number, "difficulty": number, "cpc": number, "intent": "string", "category": "string" }],
       "totalVolume": number,
       "avgDifficulty": number,
-      "intent": "string",
-      "aiAnalysis": "string (2-3 zinnen: kansen en aanpak specifiek voor ${intake.companyName})"
+      "priority": "High" | "Medium" | "Low",
+      "aiAnalysis": "string (2-3 zinnen: kansen, aanpak, en verwachte impact voor ${intake.companyName})"
     }
   ],
   "pillarPages": [
     {
-      "title": "string (pagina-titel voor ${intake.domain ?? intake.companyName})",
+      "title": "string",
       "slug": "string",
       "pillarKeyword": "string",
       "clusterPages": [{"title": "string", "slug": "string", "keyword": "string"}],
       "totalVolume": number,
-      "contentBrief": "string (korte brief: doel, doelgroep, kernboodschap, CTA — specifiek voor ${intake.companyName})"
+      "priority": "High" | "Medium" | "Low",
+      "contentBrief": "string (doel, doelgroep, kernboodschap, CTA — specifiek voor ${intake.companyName})"
     }
   ],
   "contentIdeas": [
@@ -110,9 +162,12 @@ Genereer ALLEEN een valid JSON object (geen markdown, geen uitleg, geen backtick
       "type": "pillar" | "cluster" | "blog" | "landing",
       "keyword": "string",
       "intent": "string",
+      "funnelPhase": "string",
       "estimatedWords": number,
-      "priority": "high" | "medium" | "low",
-      "aiRationale": "string (waarom dit content stuk waardevol is voor ${intake.companyName})"
+      "priority": "High" | "Medium" | "Low",
+      "effort": "Low" | "Medium" | "High",
+      "impact": "Low" | "Medium" | "High",
+      "aiRationale": "string (waarom dit contentstuk waardevol is voor ${intake.companyName} en welke doelgroep het treft)"
     }
   ],
   "internalLinks": [
@@ -129,14 +184,14 @@ Genereer ALLEEN een valid JSON object (geen markdown, geen uitleg, geen backtick
       "cpc": number,
       "intent": "string",
       "priority": "quick-win" | "high-value" | "long-term" | "low-priority",
-      "effort": "low" | "medium" | "high",
-      "impact": "low" | "medium" | "high",
-      "recommendation": "string (concrete actie voor het marketingteam)"
+      "effort": "Low" | "Medium" | "High",
+      "impact": "Low" | "Medium" | "High",
+      "recommendation": "string (concrete, specifieke actie — geen generiek advies)"
     }
   ]
 }
 
-BELANGRIJK: Alle output moet specifiek zijn voor ${intake.companyName} in de sector ${intake.industry ?? "onbekend"} in ${region}. Geen generieke marketing keywords.`;
+KWALITEITSLAT: Alle output moet specifiek zijn voor ${intake.companyName} in ${intake.industry ?? "deze sector"} in ${region}. Geen generieke marketing-keywords. Elk keyword, elke cluster en elke aanbeveling moet terugkoppelen aan de bedrijfsdoelstelling: ${goal}.`;
 }
 
 function buildSeaPrompt(intake: Intake, keywords: KeywordEntry[]): string {
@@ -144,8 +199,19 @@ function buildSeaPrompt(intake: Intake, keywords: KeywordEntry[]): string {
   const services = intake.productsServices ?? "onbekend";
   const region = intake.region ?? intake.country ?? "Nederland";
   const model = intake.businessModel ?? "onbekend";
+  const goal = intake.seaGoals ?? "leads genereren";
+  const conversion = intake.conversionType ?? "lead";
 
-  return `Je bent een elite Google Ads specialist bij een bureau dat miljoenenbudgetten beheert. Je denkt in conversies, ROAS en schaalbaarheid. Je output moet DIRECT implementeerbaar zijn in Google Ads.
+  return `## STRATEGISCH KADER
+
+Voordat je de JSON genereert, denk intern door:
+- Conversiedoelstelling: ${conversion} — wat bepaalt de commerciële waarde?
+- Welke campagnestructuur maximaliseert conversies binnen €${budget}/mnd?
+- Branded vs. non-branded verdeling voor ${intake.companyName}
+- Geografische focus: ${region} — lokaal vs. nationaal bereik
+- Welke zoekintentie heeft de hoogste conversiewaarde voor ${model}?
+- Hoe verdeelt budget optimaal: demand capture (Exact/Phrase) vs. discovery (Broad/PMax)?
+- Welke negatieve keywords zijn kritisch om verspilling te voorkomen in ${intake.industry ?? "deze sector"}?
 
 ## KLANTPROFIEL
 - Bedrijf: ${intake.companyName}
@@ -156,50 +222,70 @@ function buildSeaPrompt(intake: Intake, keywords: KeywordEntry[]): string {
 - Diensten/producten: ${services}
 - Concurrenten: ${intake.competitors ?? "onbekend"}
 - Maandelijks budget: €${budget}
-- Conversietype: ${intake.conversionType ?? "lead"}
+- Conversietype: ${conversion}
+- SEA-doelstelling: ${goal}
+${intake.extraContext ? `
+## KLANTENKAART / EXTRA CONTEXT
+${intake.extraContext}
 
+BELANGRIJK: Gebruik de klantenkaart als PRIMAIRE bron voor campagne-angles en USP's.
+` : ""}
 ## KEYWORD DATA (${keywords.length} zoekwoorden)
 ${keywords.map(k => `${k.keyword} (vol:${k.volume}, kd:${k.difficulty}, cpc:${k.cpc})`).join("\n")}
 
-## OPDRACHT — SEA-FIRST MINDSET
-Ontwerp een complete Google Ads strategie alsof je morgen live gaat. Denk in:
-- Welke campagnestructuur maximaliseert conversies binnen €${budget}/maand?
-- Welke keywords hebben de hoogste conversie-intentie?
-- Hoe verdeel je budget optimaal over campagnes?
-- Welke negatieve keywords voorkomen verspilling?
-- Welke ad copy converteert voor ${model} in ${intake.industry ?? "deze sector"}?
+## OPDRACHT — SEA STRATEGIE
+Ontwerp een complete Google Ads strategie die morgen live kan. Denk in conversies, ROAS en schaalbaarheid.
+
+Campagnelogica:
+- Splits campagnes op intentie, productlijn, geografie of funnelfase — alleen als het budgetbeheer, berichtrelevantie of rapportage verbetert
+- Prioriteer Exact Match voor hoog-intentie terms, Phrase voor bereik, Broad alleen met sterke negatieve lijsten
+- Biedstrategie: start met handmatig CPC of doel-CPA als er voldoende conversiedata is, anders mCPC
+- Budget: concentreer op hoog-intentie campagnes eerst — verspreid niet te breed met €${budget}/mnd
+
+Advertentieteksten (RSA formaat):
+- Schrijf in het Nederlands, specifiek voor ${intake.companyName}
+- Gebruik USP's, sociale bewijslast, urgentie of differentiatie
+- Headlines max 30 tekens, descriptions max 90 tekens
+- Elke headline en description moet zelfstandig leesbaar zijn
 
 Genereer ALLEEN een valid JSON object (geen markdown, geen backticks):
 
 {
   "campaigns": [
     {
-      "name": "string (campagnenaam voor ${intake.companyName})",
+      "name": "string",
       "type": "Search" | "Display / RLSA" | "Performance Max",
       "objective": "string",
       "budget": number,
       "budgetPercent": number,
-      "priority": "high" | "medium" | "low",
+      "priority": "High" | "Medium" | "Low",
+      "matchTypeLogic": "string (onderbouwing van match-type keuzes voor deze campagne)",
       "adGroups": [
         {
           "name": "string",
           "keywords": [{"keyword": "string", "matchType": "Exact" | "Phrase" | "Broad", "volume": number}],
-          "headlines": ["string (max 30 chars, 15 stuks, in het Nederlands, specifiek voor ${intake.companyName})"],
-          "descriptions": ["string (max 90 chars, 4 stuks, overtuigend, met CTA)"],
+          "headlines": ["string (max 30 chars, min 10 headlines, in het Nederlands)"],
+          "descriptions": ["string (max 90 chars, 4 stuks, met CTA)"],
           "landingPage": "string"
         }
       ],
-      "aiInsight": "string (strategische toelichting: waarom deze campagne, verwachte ROAS, risico's)"
+      "aiInsight": "string (strategische toelichting: waarom deze campagne, verwachte CPA/ROAS, risico's en wanneer op te schalen)"
     }
   ],
-  "negativeKeywords": ["string (minimaal 30 relevante negatieve keywords voor ${intake.industry ?? "deze sector"})"],
+  "negativeKeywords": ["string (minimaal 30 kritische negatieve keywords voor ${intake.industry ?? "deze sector"} — focus op irrelevante intentie, merken van concurrenten, en informatieve zoekopdrachten die niet converteren)"],
   "adCopy": {
     "campaigns": [
       {"name": "string", "adGroups": [{"name": "string", "headlines": ["string"], "descriptions": ["string"]}]}
     ]
   },
   "budgetAllocation": [
-    {"campaign": "string", "budget": number, "percentage": number, "rationale": "string (waarom dit % voor deze campagne)"}
+    {
+      "campaign": "string",
+      "budget": number,
+      "percentage": number,
+      "priority": "High" | "Medium" | "Low",
+      "rationale": "string (concrete onderbouwing: waarom dit percentage, verwachte conversie-opbrengst)"
+    }
   ],
   "landingPages": [
     {
@@ -208,8 +294,8 @@ Genereer ALLEEN een valid JSON object (geen markdown, geen backticks):
       "headline": "string",
       "cta": "string",
       "conversionGoal": "string",
-      "elements": ["string"],
-      "aiOptimizationTips": "string (concrete tips voor hogere conversieratio)"
+      "elements": ["string (essentiële pagina-elementen voor conversie)"],
+      "aiOptimizationTips": "string (3-5 concrete CRO-tips specifiek voor ${intake.companyName})"
     }
   ],
   "bidStrategy": [
@@ -219,25 +305,41 @@ Genereer ALLEEN een valid JSON object (geen markdown, geen backticks):
       "targetCpa": null,
       "targetRoas": null,
       "rationale": "string",
-      "phaseIn": "string (wanneer overstappen naar geautomatiseerd bieden)"
+      "phaseIn": "string (concreet: wanneer en bij welke conversie-drempel overstappen naar geautomatiseerd bieden)"
     }
   ]
 }
 
-BELANGRIJK: Headlines en descriptions moeten in het Nederlands, specifiek voor ${intake.companyName}, en direct bruikbaar in Google Ads RSA formaat. Geen generieke teksten.`;
+KWALITEITSLAT: Headlines en descriptions moeten direct bruikbaar zijn in Google Ads RSA-formaat. Campagnestructuur moet aansluiten op €${budget}/mnd budget — geen irrealistische versnippering. Elke aanbeveling koppelt terug aan: ${goal}.`;
 }
 
 function buildSummaryPrompt(intake: Intake, keywords: KeywordEntry[], seoJson: string, seaJson: string): string {
-  return `Schrijf een kort strategisch rapport voor ${intake.companyName} (${intake.industry ?? "onbekend"}, ${intake.businessModel ?? "onbekend"}, ${intake.region ?? "Nederland"}).
-SEO clusters: ${seoJson}. SEA campagnes: ${seaJson}. Budget: €${intake.adBudget ?? "1000"}/maand.
+  const region = intake.region ?? intake.country ?? "Nederland";
+  const budget = intake.adBudget ?? "1000";
 
-Genereer ALLEEN valid JSON (geen markdown):
+  return `Schrijf een senior-level strategisch rapport voor ${intake.companyName} (${intake.industry ?? "onbekend"}, ${intake.businessModel ?? "onbekend"}, ${region}).
+
+Context:
+- SEO clusters: ${seoJson}
+- SEA campagnes: ${seaJson}
+- Maandbudget SEA: €${budget}
+- Doelgroep: ${intake.targetAudience ?? "onbekend"}
+- SEO-doelstelling: ${intake.seoGoals ?? "organische groei"}
+- SEA-doelstelling: ${intake.seaGoals ?? "leads genereren"}
+
+Kwaliteitslat:
+- Schrijf als senior strateeg, niet als docent
+- Geen generieke claims — elk punt moet specifiek zijn voor ${intake.companyName}
+- Verbind SEO en SEA: leg uit hoe ze elkaar versterken voor deze klant
+- Implementatielijst moet geprioriteerd zijn (High/Medium/Low) en direct uitvoerbaar
+
+Genereer ALLEEN valid JSON (geen markdown, geen backticks):
 {
-  "executiveSummary": "string (2 alinea's, professioneel Nederlands, specifiek voor ${intake.companyName})",
-  "keyFindings": ["string (5-6 bevindingen)"],
-  "recommendations": ["string (5-6 aanbevelingen)"],
-  "implementationChecklist": [{"task":"string","category":"string","priority":"high|medium|low","status":"pending"}],
-  "performanceEstimates": [{"metric":"string","current":"string","month3":"string","month6":"string","month12":"string","confidence":"hoog|gemiddeld|laag"}]
+  "executiveSummary": "string (2 krachtige alinea's professioneel Nederlands: situatie + strategie + verwacht resultaat voor ${intake.companyName})",
+  "keyFindings": ["string (5-6 concrete bevindingen — geen open deuren, elk gebaseerd op de intake en keyworddata)"],
+  "recommendations": ["string (5-6 geprioriteerde aanbevelingen met High/Medium/Low label en korte onderbouwing)"],
+  "implementationChecklist": [{"task":"string","category":"SEO" | "SEA" | "CRO" | "Technisch" | "Content","priority":"High" | "Medium" | "Low","status":"pending"}],
+  "performanceEstimates": [{"metric":"string","current":"string","month3":"string","month6":"string","month12":"string","confidence":"Hoog" | "Gemiddeld" | "Laag","assumption":"string (aanname achter de schatting)"}]
 }`;
 }
 
@@ -249,7 +351,8 @@ async function callClaude(prompt: string): Promise<any> {
 
   const response = await client.messages.create({
     model,
-    max_tokens: 3000,
+    max_tokens: 4096,
+    system: MARKETING_SYSTEM_PROMPT,
     messages: [
       {
         role: "user",
@@ -265,7 +368,6 @@ async function callClaude(prompt: string): Promise<any> {
 
   const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
 
-  // Try to find JSON in the response if it's wrapped in other text
   let jsonStr = cleaned;
   const jsonStart = cleaned.indexOf("{");
   const jsonEnd = cleaned.lastIndexOf("}");
@@ -303,7 +405,6 @@ export async function generateStrategyWithClaude(
   let summaryResult: any = null;
 
   if (type === "both") {
-    // Run SEO and SEA in parallel
     console.log("[Claude] Running SEO + SEA in parallel...");
     [seoResult, seaResult] = await Promise.all([
       callClaude(buildSeoPrompt(intake, topKeywords)),
@@ -317,7 +418,6 @@ export async function generateStrategyWithClaude(
     seaResult = await callClaude(buildSeaPrompt(intake, topKeywords));
   }
 
-  // Quick summary
   console.log("[Claude] Generating summary...");
   summaryResult = await callClaude(
     buildSummaryPrompt(
