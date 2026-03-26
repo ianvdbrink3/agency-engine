@@ -108,23 +108,83 @@ export default function ProjectDashboard() {
       const ci = `Bedrijf: ${intakeData.companyName}\nWebsite: ${intakeData.domain ?? "onbekend"}\nSector: ${intakeData.industry ?? "onbekend"}\nModel: ${intakeData.businessModel ?? "onbekend"}\nRegio: ${intakeData.region ?? intakeData.country ?? "Nederland"}\nDiensten: ${intakeData.productsServices ?? "onbekend"}\nBudget: €${intakeData.adBudget ?? "1000"}/maand\nConcurrenten: ${intakeData.competitors ?? "onbekend"}\nDoelgroep: ${intakeData.targetAudience ?? "onbekend"}`;
       const extra = intakeData.extraContext ? `\n\nKLANTENKAART:\n${intakeData.extraContext}\n\nGebruik bovenstaande als PRIMAIRE bron.` : "";
 
-      async function callClaude(prompt: string, maxTokens = 4096) {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
+      async function callClaude(prompt: string, maxTokens = 8192) {
+        // Use native fetch without global auth interceptor for external API calls
+        const nativeFetch = (window as any).__nativeFetch || window.fetch;
+        const res = await nativeFetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": claudeKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": claudeKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+          },
           body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
         });
-        if (!res.ok) throw new Error(`Claude API fout (${res.status}): ${(await res.text()).substring(0, 200)}`);
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Claude API fout (${res.status}): ${errText.substring(0, 300)}`);
+        }
         const data = await res.json();
         const text = data.content?.map((b: any) => b.text || "").join("") || "";
         const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-        const jsonStart = cleaned.indexOf("{");
-        if (jsonStart === -1) throw new Error("Geen JSON in Claude response");
+
+        // Try to find JSON object or array
+        let jsonStart = cleaned.indexOf("{");
+        const arrStart = cleaned.indexOf("[");
+        if (arrStart !== -1 && (jsonStart === -1 || arrStart < jsonStart)) {
+          // Top-level array
+          jsonStart = arrStart;
+          let bracketCount = 0, jsonEnd = jsonStart;
+          for (let i = jsonStart; i < cleaned.length; i++) {
+            if (cleaned[i] === "[") bracketCount++;
+            if (cleaned[i] === "]") { bracketCount--; if (bracketCount === 0) { jsonEnd = i; break; } }
+          }
+          const jsonStr = cleaned.substring(jsonStart, jsonEnd + 1);
+          try { return JSON.parse(jsonStr); } catch { /* fall through */ }
+        }
+
+        if (jsonStart === -1) throw new Error("Geen JSON in Claude response. Response start: " + cleaned.substring(0, 100));
+
         let braceCount = 0, jsonEnd = jsonStart;
-        for (let i = jsonStart; i < cleaned.length; i++) { if (cleaned[i] === "{") braceCount++; if (cleaned[i] === "}") { braceCount--; if (braceCount === 0) { jsonEnd = i; break; } } }
-        if (braceCount !== 0) throw new Error("Ongeldig JSON");
-        const jsonStr = cleaned.substring(jsonStart, jsonEnd + 1);
-        try { return JSON.parse(jsonStr); } catch { return JSON.parse(jsonStr.replace(/'/g, '"').replace(/,\s*}/g, "}").replace(/,\s*\]/g, "]")); }
+        for (let i = jsonStart; i < cleaned.length; i++) {
+          if (cleaned[i] === "{") braceCount++;
+          if (cleaned[i] === "}") { braceCount--; if (braceCount === 0) { jsonEnd = i; break; } }
+        }
+
+        let jsonStr = cleaned.substring(jsonStart, jsonEnd + 1);
+
+        // If JSON was truncated (braces not balanced), try to fix it
+        if (braceCount !== 0) {
+          console.warn(`JSON truncated (${braceCount} open braces). Attempting repair...`);
+          // Close open arrays and objects
+          let fix = jsonStr;
+          // Count open brackets
+          let openBrackets = 0;
+          for (const ch of fix) { if (ch === "[") openBrackets++; if (ch === "]") openBrackets--; }
+          // Remove trailing comma
+          fix = fix.replace(/,\s*$/, "");
+          // Close open brackets
+          for (let i = 0; i < openBrackets; i++) fix += "]";
+          // Close open braces
+          for (let i = 0; i < braceCount; i++) fix += "}";
+          jsonStr = fix;
+        }
+
+        try { return JSON.parse(jsonStr); }
+        catch (e) {
+          // Try fixing common issues
+          let fixed = jsonStr
+            .replace(/,\s*}/g, "}")
+            .replace(/,\s*\]/g, "]")
+            .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // unquoted keys
+            .replace(/:\s*'([^']*)'/g, ': "$1"'); // single quotes
+          try { return JSON.parse(fixed); }
+          catch {
+            console.error("JSON parse failed after all repairs. First 500 chars:", jsonStr.substring(0, 500));
+            throw new Error("Claude gaf ongeldige JSON terug. Probeer opnieuw.");
+          }
+        }
       }
 
       let seoResult: any = null;
@@ -227,11 +287,10 @@ Antwoord ALLEEN als valid JSON:
         };
       }
 
-      // Save to both endpoints — dashboard save may fail if table doesn't exist yet
-      await Promise.allSettled([
-        apiRequest("POST", `/api/projects/${projectId}/save-dashboard`, saveBody),
-        apiRequest("POST", `/api/projects/${projectId}/save-strategy`, oldSaveBody),
-      ]);
+      // Save to both endpoints — each independently, failures don't block
+      setGenerateStatus("Opslaan...");
+      try { await apiRequest("POST", `/api/projects/${projectId}/save-dashboard`, saveBody); } catch (e) { console.warn("Dashboard save failed:", e); }
+      try { await apiRequest("POST", `/api/projects/${projectId}/save-strategy`, oldSaveBody); } catch (e) { console.warn("Legacy save failed:", e); }
       setGenerateStatus("");
       return { success: true };
     },
