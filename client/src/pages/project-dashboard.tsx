@@ -109,7 +109,6 @@ export default function ProjectDashboard() {
       const extra = intakeData.extraContext ? `\n\nKLANTENKAART:\n${intakeData.extraContext}\n\nGebruik bovenstaande als PRIMAIRE bron.` : "";
 
       async function callClaude(prompt: string, maxTokens = 8192) {
-        // Use native fetch without global auth interceptor for external API calls
         const nativeFetch = (window as any).__nativeFetch || window.fetch;
         const res = await nativeFetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -119,133 +118,163 @@ export default function ProjectDashboard() {
             "anthropic-version": "2023-06-01",
             "anthropic-dangerous-direct-browser-access": "true",
           },
-          body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+          body: JSON.stringify({
+            model,
+            max_tokens: maxTokens,
+            system: "Je bent een JSON API. Je antwoordt UITSLUITEND met valid JSON. Geen markdown, geen uitleg, geen backticks. Start direct met { of [. Zorg dat de JSON COMPLEET is en niet afgekapt wordt. Gebruik korte waardes om binnen de tokenlimiet te blijven.",
+            messages: [{ role: "user", content: prompt }],
+          }),
         });
         if (!res.ok) {
           const errText = await res.text();
           throw new Error(`Claude API fout (${res.status}): ${errText.substring(0, 300)}`);
         }
         const data = await res.json();
+
+        // Check if output was truncated
+        const stopReason = data.stop_reason;
+        if (stopReason === "max_tokens") {
+          console.warn("Claude output was truncated (max_tokens reached). Will attempt repair.");
+        }
+
         const text = data.content?.map((b: any) => b.text || "").join("") || "";
         const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
 
-        // Try to find JSON object or array
+        if (!cleaned) throw new Error("Leeg antwoord van Claude");
+
+        // Try direct parse first (ideal case)
+        try { return JSON.parse(cleaned); } catch { /* continue with extraction */ }
+
+        // Find JSON start
         let jsonStart = cleaned.indexOf("{");
         const arrStart = cleaned.indexOf("[");
         if (arrStart !== -1 && (jsonStart === -1 || arrStart < jsonStart)) {
-          // Top-level array
           jsonStart = arrStart;
-          let bracketCount = 0, jsonEnd = jsonStart;
-          for (let i = jsonStart; i < cleaned.length; i++) {
-            if (cleaned[i] === "[") bracketCount++;
-            if (cleaned[i] === "]") { bracketCount--; if (bracketCount === 0) { jsonEnd = i; break; } }
-          }
-          const jsonStr = cleaned.substring(jsonStart, jsonEnd + 1);
-          try { return JSON.parse(jsonStr); } catch { /* fall through */ }
         }
+        if (jsonStart === -1) throw new Error("Geen JSON gevonden. Start: " + cleaned.substring(0, 150));
 
-        if (jsonStart === -1) throw new Error("Geen JSON in Claude response. Response start: " + cleaned.substring(0, 100));
+        const isArray = cleaned[jsonStart] === "[";
+        const openChar = isArray ? "[" : "{";
+        const closeChar = isArray ? "]" : "}";
 
-        let braceCount = 0, jsonEnd = jsonStart;
+        let depth = 0, jsonEnd = jsonStart;
+        let inString = false, escaped = false;
         for (let i = jsonStart; i < cleaned.length; i++) {
-          if (cleaned[i] === "{") braceCount++;
-          if (cleaned[i] === "}") { braceCount--; if (braceCount === 0) { jsonEnd = i; break; } }
+          const ch = cleaned[i];
+          if (escaped) { escaped = false; continue; }
+          if (ch === "\\") { escaped = true; continue; }
+          if (ch === '"') { inString = !inString; continue; }
+          if (inString) continue;
+          if (ch === openChar || ch === "{" || ch === "[") depth++;
+          if (ch === closeChar || ch === "}" || ch === "]") {
+            depth--;
+            if (depth === 0) { jsonEnd = i; break; }
+          }
         }
 
         let jsonStr = cleaned.substring(jsonStart, jsonEnd + 1);
 
-        // If JSON was truncated (braces not balanced), try to fix it
-        if (braceCount !== 0) {
-          console.warn(`JSON truncated (${braceCount} open braces). Attempting repair...`);
-          // Close open arrays and objects
+        // If truncated, repair
+        if (depth > 0) {
+          console.warn(`JSON truncated (depth=${depth}). Repairing...`);
           let fix = jsonStr;
-          // Count open brackets
-          let openBrackets = 0;
-          for (const ch of fix) { if (ch === "[") openBrackets++; if (ch === "]") openBrackets--; }
-          // Remove trailing comma
-          fix = fix.replace(/,\s*$/, "");
-          // Close open brackets
+          // Remove incomplete last value (likely a truncated string)
+          fix = fix.replace(/,\s*"[^"]*$/, ""); // remove trailing incomplete key-value
+          fix = fix.replace(/,\s*$/, ""); // remove trailing comma
+          fix = fix.replace(/"[^"]*$/, '""'); // close unclosed string
+
+          // Re-count depth after cleanup
+          let openBraces = 0, openBrackets = 0;
+          let inStr = false, esc = false;
+          for (const c of fix) {
+            if (esc) { esc = false; continue; }
+            if (c === "\\") { esc = true; continue; }
+            if (c === '"') { inStr = !inStr; continue; }
+            if (inStr) continue;
+            if (c === "{") openBraces++;
+            if (c === "}") openBraces--;
+            if (c === "[") openBrackets++;
+            if (c === "]") openBrackets--;
+          }
           for (let i = 0; i < openBrackets; i++) fix += "]";
-          // Close open braces
-          for (let i = 0; i < braceCount; i++) fix += "}";
+          for (let i = 0; i < openBraces; i++) fix += "}";
           jsonStr = fix;
         }
 
-        try { return JSON.parse(jsonStr); }
-        catch (e) {
-          // Try fixing common issues
-          let fixed = jsonStr
-            .replace(/,\s*}/g, "}")
-            .replace(/,\s*\]/g, "]")
-            .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // unquoted keys
-            .replace(/:\s*'([^']*)'/g, ': "$1"'); // single quotes
-          try { return JSON.parse(fixed); }
-          catch {
-            console.error("JSON parse failed after all repairs. First 500 chars:", jsonStr.substring(0, 500));
-            throw new Error("Claude gaf ongeldige JSON terug. Probeer opnieuw.");
-          }
-        }
+        // Parse attempts
+        try { return JSON.parse(jsonStr); } catch {}
+
+        // Fix common issues
+        let fixed = jsonStr
+          .replace(/,\s*}/g, "}")
+          .replace(/,\s*\]/g, "]");
+        try { return JSON.parse(fixed); } catch {}
+
+        console.error("JSON parse failed. First 300 chars:", jsonStr.substring(0, 300));
+        console.error("Last 200 chars:", jsonStr.substring(jsonStr.length - 200));
+        throw new Error("Claude gaf ongeldige JSON terug. Probeer opnieuw.");
       }
 
       let seoResult: any = null;
       if (type === "seo" || type === "both") {
         setGenerateStep(2);
         setGenerateStatus("SEO & Pijler-Cluster genereren...");
-        seoResult = await callClaude(`Je bent een top 1% SEO-strateeg. Bouw een COMPLEET zoekwoordenonderzoek + pijler-clustermodel.
+        seoResult = await callClaude(`Bouw een zoekwoordenonderzoek + pijler-clustermodel.
 
 ${ci}${extra}
 
-ZOEKWOORDEN (DataForSEO):
-${kwStr || "Geen externe data — genereer zelf 40-60 relevante keywords voor deze sector."}
+ZOEKWOORDEN:
+${kwStr || "Genereer zelf 20-30 relevante keywords voor deze sector."}
 
-TAAK:
-1. Categoriseer ALLE zoekwoorden in 4-6 thematische categorieën met volumes
-2. Markeer high-impact keywords met isHighlight:true
-3. Bouw een VOLLEDIG pijler-clustermodel: 3-6 pijlers, elk met 4-8 clusters, clusters met subclusters waar logisch
-4. Per pijler: naam, URL-slug, beschrijving, totaal volume
-5. Per cluster: naam, URL-slug, intent (informatief/commercieel/transactioneel), zoekwoorden met volumes
+REGELS:
+- Max 4 categorieën, max 10 keywords per categorie
+- Max 4 pijlers, max 5 clusters per pijler, max 4 keywords per cluster
+- Houd waardes KORT (geen lange beschrijvingen)
+- Subclusters alleen als echt nodig (max 2)
 
-Antwoord ALLEEN als valid JSON:
-{"categories":[{"name":"string","color":"#hex","keywordCount":0,"totalVolume":0,"keywords":[{"keyword":"string","volume":0,"isHighlight":true,"priority":"hoog|gemiddeld|laag"}]}],"pillars":[{"name":"string","slug":"/slug/","description":"string","icon":"emoji","color":"#hex","totalVolume":0,"clusters":[{"name":"string","slug":"/parent/child/","intent":"informatief|commercieel|transactioneel","keywords":[{"keyword":"string","volume":0}],"subclusters":[{"name":"string","keywords":[{"keyword":"string","volume":0}]}]}]}],"totalKeywords":0,"totalVolume":0}`, 4096);
+JSON format:
+{"categories":[{"name":"str","color":"#hex","totalVolume":0,"keywords":[{"keyword":"str","volume":0,"isHighlight":false}]}],"pillars":[{"name":"str","slug":"/str/","description":"kort","icon":"emoji","color":"#hex","totalVolume":0,"clusters":[{"name":"str","slug":"/str/","intent":"informatief|commercieel|transactioneel","keywords":[{"keyword":"str","volume":0}]}]}],"totalKeywords":0,"totalVolume":0}`);
       }
 
       let seaResult: any = null;
       if (type === "sea" || type === "both") {
         setGenerateStep(type === "both" ? 3 : 2);
         setGenerateStatus("SEA & Campagnes genereren...");
-        seaResult = await callClaude(`Je bent een elite Google Ads specialist. Ontwerp een COMPLETE campagnestructuur.
+        seaResult = await callClaude(`Ontwerp een Google Ads campagnestructuur.
 
 ${ci}${extra}
 Budget: €${intakeData.adBudget ?? "1000"}/maand
 
 ZOEKWOORDEN:
-${kwStr || "Genereer 20-30 high-intent keywords."}
+${kwStr || "Genereer 15 high-intent keywords."}
 
-TAAK:
-1. Ontwerp 3-6 campagnes (per product/dienst + generiek)
-2. Per campagne: ad groups met exact/phrase match keywords + volumes
-3. Per campagne: 15 headlines (types: KEYWORD/USP_DIENST/USP_BEDRIJF/SOCIAL_PROOF/CTA) + 4 descriptions
-4. Negatieve keywords: 10-15 account-level + cross-campagne uitsluitingen
-5. Targeting: locatie (met radius), dag/tijd schema, device biedingen, in-market audiences
-6. Performance forecast + 4-fasen groeiplan
+REGELS:
+- Max 4 campagnes, max 5 keywords per campagne
+- Max 8 headlines per campagne (kort!), 2 descriptions
+- Max 8 account-level negatieve keywords
+- Houd ALLES kort en bondig
 
-Antwoord ALLEEN als valid JSON:
-{"campaigns":[{"name":"string","type":"Product|Generiek|Brand","color":"#hex","keywords":[{"keyword":"string","matchType":"exact|phrase|broad","volume":0,"cpc":0}],"budget":0,"budgetPercent":0,"landingPage":"/slug/","headlines":[{"text":"max 30 chars","type":"KEYWORD|USP_DIENST|USP_BEDRIJF|SOCIAL_PROOF|CTA"}],"descriptions":["max 90 chars"]}],"negativeKeywords":{"accountLevel":[{"keywords":"string","reason":"string"}],"crossCampaign":[{"campaign":"string","excludes":["string"],"reason":"string"}]},"targeting":{"locations":[{"name":"string","radius":"string"}],"schedule":{"days":"string","hours":"string"},"devices":[{"type":"Desktop|Tablet|Mobile","bidAdjust":"string"}],"audiences":["string"]},"performance":{"forecast":[{"metric":"string","value":"string","note":"string"}],"growthPlan":[{"phase":1,"title":"string","description":"string"}]}}`, 4096);
+JSON format:
+{"campaigns":[{"name":"str","type":"Product|Generiek","color":"#hex","keywords":[{"keyword":"str","matchType":"exact|phrase","volume":0,"cpc":0}],"budget":0,"budgetPercent":0,"landingPage":"/str/","headlines":[{"text":"max 30ch","type":"KEYWORD|USP_DIENST|CTA"}],"descriptions":["max 90ch"]}],"negativeKeywords":{"accountLevel":[{"keywords":"str","reason":"str"}],"crossCampaign":[{"campaign":"str","excludes":["str"]}]},"targeting":{"locations":[{"name":"str","radius":"str"}],"schedule":{"days":"str","hours":"str"},"devices":[{"type":"Desktop|Mobile","bidAdjust":"str"}],"audiences":["str"]},"performance":{"forecast":[{"metric":"str","value":"str","note":"str"}],"growthPlan":[{"phase":1,"title":"str","description":"str"}]}}`);
       }
 
       setGenerateStep(type === "both" ? 4 : 3);
       setGenerateStatus("Dashboard samenvatten...");
-      const overviewResult = await callClaude(`Je bent een senior marketing consultant. Schrijf een executive dashboard overzicht.
+      const overviewResult = await callClaude(`Schrijf een dashboard overzicht.
 
 ${ci}${extra}
 Budget: €${intakeData.adBudget ?? "1000"}/maand
-${seoResult ? `SEO: ${seoResult.totalKeywords} keywords, ${seoResult.totalVolume} volume, ${seoResult.pillars?.length} pijlers` : ""}
-${seaResult ? `SEA: ${seaResult.campaigns?.length} campagnes` : ""}
+${seoResult ? `SEO: ${seoResult.totalKeywords ?? "?"} keywords, ${seoResult.totalVolume ?? "?"} volume, ${seoResult.pillars?.length ?? 0} pijlers` : ""}
+${seaResult ? `SEA: ${seaResult.campaigns?.length ?? 0} campagnes` : ""}
 
-TAAK: Genereer KPIs, top 5 prioriteitszoekwoorden, quick wins (3 SEO + 3 SEA), 5 strategie-bullets, implementatie checklist (12-18 stappen), top 20 zoekwoorden.
+REGELS:
+- Top 5 keywords, 3 quick wins SEO + 3 SEA, max 5 strategie-bullets
+- Checklist: max 12 items
+- Top 20 keywords (kort!)
+- Houd ALLES beknopt
 
-Antwoord ALLEEN als valid JSON:
-{"kpis":{"totalVolume":0,"seoScore":0,"seaScore":0,"trafficPotential":"string","estimatedLeads":"string"},"topKeywords":[{"keyword":"string","volume":0,"intent":"string","reason":"string"}],"quickWins":{"seo":[{"action":"string","impact":"string","effort":"laag|middel"}],"sea":[{"action":"string","impact":"string","effort":"laag|middel"}]},"strategyBullets":["string"],"checklist":[{"task":"string","category":"string","priority":"high|medium|low"}],"top20":[{"keyword":"string","volume":0,"intent":"string","type":"SEO|SEA|Beide","score":0}]}`, 4096);
+JSON format:
+{"kpis":{"totalVolume":0,"seoScore":0,"seaScore":0,"trafficPotential":"str","estimatedLeads":"str"},"topKeywords":[{"keyword":"str","volume":0,"intent":"str","reason":"str"}],"quickWins":{"seo":[{"action":"str","impact":"str"}],"sea":[{"action":"str","impact":"str"}]},"strategyBullets":["str"],"checklist":[{"task":"str","category":"str","priority":"high|medium|low"}],"top20":[{"keyword":"str","volume":0,"intent":"str","type":"SEO|SEA","score":0}]}`);
 
       setGenerateStatus("Opslaan...");
       const saveBody: any = {
