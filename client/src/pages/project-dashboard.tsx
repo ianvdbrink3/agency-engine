@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import {
   Zap, Calendar, Building2, FileText, Search, Target,
   BarChart2, Eye, Layers, Megaphone, Type, ShieldMinus, MapPin,
   TrendingUp, CheckSquare, Star, DollarSign, Users, Globe, Clock, Monitor, Lightbulb,
+  Download, Pencil, Copy, CheckCheck, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,11 @@ import { StatusBadge } from "@/components/status-badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  exportKeywordsCSV, exportPillarCSV, exportCampaignsCSV,
+  exportAdCopyCSV, exportChecklistCSV, exportTop20CSV,
+  exportFullDashboard, copyAdCopyToClipboard, copyAllAdCopyToClipboard,
+} from "@/lib/export-utils";
 import type { Project, Client, Intake } from "@shared/schema";
 
 function formatDate(dateStr: string) {
@@ -43,9 +49,24 @@ export default function ProjectDashboard() {
   const params = useParams<{ id: string }>();
   const projectId = Number(params.id);
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [generateStatus, setGenerateStatus] = useState("");
+  const [generateStep, setGenerateStep] = useState(0);
+  const [generateTotalSteps, setGenerateTotalSteps] = useState(3);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [checkedItems, setCheckedItems] = useState<Record<number, boolean>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  function startTimer() {
+    setElapsedSeconds(0);
+    timerRef.current = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+  }
+  function stopTimer() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }
+  useEffect(() => () => stopTimer(), []);
 
   const nullOn404 = async ({ queryKey }: { queryKey: readonly unknown[] }) => {
     const res = await fetch(queryKey.join("/"));
@@ -73,7 +94,11 @@ export default function ProjectDashboard() {
 
   const generateMutation = useMutation({
     mutationFn: async (type: "seo" | "sea" | "both") => {
+      startTimer();
+      setGenerateStep(0);
+      setGenerateTotalSteps(type === "both" ? 4 : 3);
       setGenerateStatus("Data ophalen...");
+      setGenerateStep(1);
       const prepRes = await apiRequest("POST", `/api/projects/${projectId}/prepare`);
       const { intake: intakeData, keywords, model } = await prepRes.json();
       const keyRes = await apiRequest("POST", "/api/auth/claude-key");
@@ -104,6 +129,7 @@ export default function ProjectDashboard() {
 
       let seoResult: any = null;
       if (type === "seo" || type === "both") {
+        setGenerateStep(2);
         setGenerateStatus("SEO & Pijler-Cluster genereren...");
         seoResult = await callClaude(`Je bent een top 1% SEO-strateeg. Bouw een COMPLEET zoekwoordenonderzoek + pijler-clustermodel.
 
@@ -125,6 +151,7 @@ Antwoord ALLEEN als valid JSON:
 
       let seaResult: any = null;
       if (type === "sea" || type === "both") {
+        setGenerateStep(type === "both" ? 3 : 2);
         setGenerateStatus("SEA & Campagnes genereren...");
         seaResult = await callClaude(`Je bent een elite Google Ads specialist. Ontwerp een COMPLETE campagnestructuur.
 
@@ -146,6 +173,7 @@ Antwoord ALLEEN als valid JSON:
 {"campaigns":[{"name":"string","type":"Product|Generiek|Brand","color":"#hex","keywords":[{"keyword":"string","matchType":"exact|phrase|broad","volume":0,"cpc":0}],"budget":0,"budgetPercent":0,"landingPage":"/slug/","headlines":[{"text":"max 30 chars","type":"KEYWORD|USP_DIENST|USP_BEDRIJF|SOCIAL_PROOF|CTA"}],"descriptions":["max 90 chars"]}],"negativeKeywords":{"accountLevel":[{"keywords":"string","reason":"string"}],"crossCampaign":[{"campaign":"string","excludes":["string"],"reason":"string"}]},"targeting":{"locations":[{"name":"string","radius":"string"}],"schedule":{"days":"string","hours":"string"},"devices":[{"type":"Desktop|Tablet|Mobile","bidAdjust":"string"}],"audiences":["string"]},"performance":{"forecast":[{"metric":"string","value":"string","note":"string"}],"growthPlan":[{"phase":1,"title":"string","description":"string"}]}}`, 4096);
       }
 
+      setGenerateStep(type === "both" ? 4 : 3);
       setGenerateStatus("Dashboard samenvatten...");
       const overviewResult = await callClaude(`Je bent een senior marketing consultant. Schrijf een executive dashboard overzicht.
 
@@ -208,6 +236,8 @@ Antwoord ALLEEN als valid JSON:
       return { success: true };
     },
     onSuccess: () => {
+      stopTimer();
+      setGenerateStep(0);
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "strategy-dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "seo"] });
@@ -215,7 +245,7 @@ Antwoord ALLEEN als valid JSON:
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "summary"] });
       toast({ title: "Dashboard gegenereerd", description: "Het strategiedashboard is succesvol aangemaakt." });
     },
-    onError: (err: Error) => { setGenerateStatus(""); toast({ title: "Fout bij genereren", description: err.message, variant: "destructive" }); },
+    onError: (err: Error) => { stopTimer(); setGenerateStep(0); setGenerateStatus(""); toast({ title: "Fout bij genereren", description: err.message, variant: "destructive" }); },
   });
 
   if (projectLoading) return <div className="p-6 space-y-5 max-w-6xl mx-auto"><Skeleton className="h-8 w-40 rounded" /><Skeleton className="h-20 w-full rounded-xl" /><Skeleton className="h-96 w-full rounded-xl" /></div>;
@@ -247,10 +277,32 @@ Antwoord ALLEEN als valid JSON:
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           {generateMutation.isPending ? (
-            <Button disabled className="gap-2"><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{generateStatus || "Genereren..."}</Button>
+            <div className="flex flex-col items-end gap-1.5">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                <span className="text-sm font-medium">{generateStatus}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">{Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, "0")}</span>
+              </div>
+              <div className="flex items-center gap-2 w-full max-w-[280px]">
+                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${(generateStep / generateTotalSteps) * 100}%` }} />
+                </div>
+                <span className="text-[10px] text-muted-foreground tabular-nums">{generateStep}/{generateTotalSteps}</span>
+              </div>
+            </div>
           ) : (<>
+            {dash && (
+              <Button variant="outline" size="sm" onClick={() => exportFullDashboard(dash, project.name)} className="gap-1.5">
+                <Download className="w-3.5 h-3.5" />Export
+              </Button>
+            )}
+            {intake && (
+              <Button variant="outline" size="sm" onClick={() => navigate(`/projects/${projectId}/edit`)} className="gap-1.5">
+                <Pencil className="w-3.5 h-3.5" />Intake
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => generateMutation.mutate("seo")} className="gap-1.5"><Search className="w-3.5 h-3.5" />SEO</Button>
             <Button variant="outline" size="sm" onClick={() => generateMutation.mutate("sea")} className="gap-1.5"><Target className="w-3.5 h-3.5" />SEA</Button>
             <Button size="sm" onClick={() => generateMutation.mutate("both")} className="gap-1.5"><Zap className="w-3.5 h-3.5" />Beide</Button>
@@ -281,15 +333,15 @@ Antwoord ALLEEN als valid JSON:
           ); })}
         </div>
         <div className="min-h-[400px]">
-          {safeTab === "overview" && <OverviewTab data={dash.overview} />}
-          {safeTab === "keywords" && <KeywordsTab data={dash.seoKeywords} />}
-          {safeTab === "pillar" && <PillarTab data={dash.pillarCluster} />}
-          {safeTab === "campaigns" && <CampaignsTab data={dash.seaCampaigns} />}
-          {safeTab === "adcopy" && <AdCopyTab data={dash.adCopy} />}
-          {safeTab === "targeting" && <TargetingTab data={dash.targeting} />}
-          {safeTab === "negatives" && <NegativesTab data={dash.negatives} />}
-          {safeTab === "performance" && <PerformanceTab data={dash.performance} />}
-          {safeTab === "checklist" && <ChecklistTab data={dash.checklist} checked={checkedItems} onToggle={(i) => setCheckedItems(p => ({ ...p, [i]: !p[i] }))} />}
+            {safeTab === "overview" && <><TabExportBar onExport={() => dash.overview?.top20?.length && exportTop20CSV(dash.overview.top20)} label="Top 20 → XLSX" /><OverviewTab data={dash.overview} /></>}
+            {safeTab === "keywords" && <><TabExportBar onExport={() => exportKeywordsCSV(dash.seoKeywords)} label="Zoekwoorden → XLSX" /><KeywordsTab data={dash.seoKeywords} /></>}
+            {safeTab === "pillar" && <><TabExportBar onExport={() => exportPillarCSV(dash.pillarCluster)} label="Pijler-Cluster → XLSX" /><PillarTab data={dash.pillarCluster} /></>}
+            {safeTab === "campaigns" && <><TabExportBar onExport={() => exportCampaignsCSV(dash.seaCampaigns)} label="Campagnes → XLSX" /><CampaignsTab data={dash.seaCampaigns} /></>}
+            {safeTab === "adcopy" && <><TabExportBar onExport={() => exportAdCopyCSV(dash.adCopy)} label="Ad Copy → XLSX" secondAction={() => { copyAllAdCopyToClipboard(dash.adCopy); setCopiedId("all-adcopy"); setTimeout(() => setCopiedId(null), 2000); }} secondLabel={copiedId === "all-adcopy" ? "Gekopieerd!" : "Kopieer alles"} /><AdCopyTab data={dash.adCopy} copiedId={copiedId} onCopy={(id: string) => { setCopiedId(id); setTimeout(() => setCopiedId(null), 2000); }} /></>}
+            {safeTab === "targeting" && <TargetingTab data={dash.targeting} />}
+            {safeTab === "negatives" && <NegativesTab data={dash.negatives} />}
+            {safeTab === "performance" && <PerformanceTab data={dash.performance} />}
+            {safeTab === "checklist" && <><TabExportBar onExport={() => exportChecklistCSV(dash.checklist)} label="Checklist → XLSX" /><ChecklistTab data={dash.checklist} checked={checkedItems} onToggle={(i) => setCheckedItems(p => ({ ...p, [i]: !p[i] }))} /></>}
         </div>
       </>) : (
         <Card className="border border-dashed border-border/60"><CardContent className="py-20 text-center">
@@ -388,15 +440,48 @@ function CampaignsTab({ data }: { data: any }) {
   );
 }
 
-function AdCopyTab({ data }: { data: any }) {
+function AdCopyTab({ data, copiedId, onCopy }: { data: any; copiedId?: string | null; onCopy?: (id: string) => void }) {
   const campaigns = Array.isArray(data) ? data : [];
   if (!campaigns.length) return <EmptyState msg="Geen ad copy." />;
   const tc: Record<string, string> = { KEYWORD: "bg-blue-500/10 text-blue-600 border-blue-500/20", USP_DIENST: "bg-amber-500/10 text-amber-600 border-amber-500/20", USP_BEDRIJF: "bg-purple-500/10 text-purple-600 border-purple-500/20", SOCIAL_PROOF: "bg-pink-500/10 text-pink-600 border-pink-500/20", CTA: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" };
-  return (<div className="space-y-6">{campaigns.map((c: any, ci: number) => (<div key={ci}>
-    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/60"><div className="w-3 h-3 rounded" style={{ background: c.color ?? "hsl(var(--primary))" }} /><span className="font-bold text-sm">{c.name}</span><span className="text-xs text-muted-foreground">— {c.headlines?.length ?? 0} headlines</span></div>
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">{(c.headlines ?? []).map((h: any, hi: number) => (<div key={hi} className="p-2.5 rounded-lg border border-border/40 bg-muted/10"><p className="text-xs font-semibold mb-1">{typeof h === "string" ? h : h.text}</p>{h.type && <Badge variant="outline" className={cn("text-[8px]", tc[h.type] ?? "")}>{h.type.replace("_", " ")}</Badge>}</div>))}</div>
-    {(c.descriptions ?? []).length > 0 && <div className="space-y-1.5"><p className="text-xs font-medium text-muted-foreground">Beschrijvingen:</p>{c.descriptions.map((d: string, di: number) => (<p key={di} className="text-xs p-2 rounded bg-muted/20 border border-border/30">{di + 1}. {d}</p>))}</div>}
-  </div>))}</div>);
+  return (
+    <div className="space-y-6">
+      {campaigns.map((c: any, ci: number) => {
+        const cid = `adcopy-${ci}`;
+        return (
+          <div key={ci}>
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/60">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded" style={{ background: c.color ?? "hsl(var(--primary))" }} />
+                <span className="font-bold text-sm">{c.name}</span>
+                <span className="text-xs text-muted-foreground">— {c.headlines?.length ?? 0} headlines</span>
+              </div>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1" onClick={() => { copyAdCopyToClipboard(c); onCopy?.(cid); }}>
+                {copiedId === cid ? <CheckCheck className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                {copiedId === cid ? "Gekopieerd" : "Kopieer"}
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+              {(c.headlines ?? []).map((h: any, hi: number) => (
+                <div key={hi} className="p-2.5 rounded-lg border border-border/40 bg-muted/10">
+                  <p className="text-xs font-semibold mb-1">{typeof h === "string" ? h : h.text}</p>
+                  {h.type && <Badge variant="outline" className={cn("text-[8px]", tc[h.type] ?? "")}>{h.type.replace("_", " ")}</Badge>}
+                </div>
+              ))}
+            </div>
+            {(c.descriptions ?? []).length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">Beschrijvingen:</p>
+                {c.descriptions.map((d: string, di: number) => (
+                  <p key={di} className="text-xs p-2 rounded bg-muted/20 border border-border/30">{di + 1}. {d}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function TargetingTab({ data }: { data: any }) {
@@ -444,6 +529,21 @@ function ChecklistTab({ data, checked, onToggle }: { data: any; checked: Record<
       </button>
     ); })}</div>
   </div>);
+}
+
+function TabExportBar({ onExport, label, secondAction, secondLabel }: { onExport: () => void; label: string; secondAction?: () => void; secondLabel?: string }) {
+  return (
+    <div className="flex items-center justify-end gap-2 mb-3">
+      {secondAction && (
+        <Button variant="ghost" size="sm" onClick={secondAction} className="h-7 px-2.5 text-[11px] gap-1.5">
+          <Copy className="w-3 h-3" />{secondLabel}
+        </Button>
+      )}
+      <Button variant="outline" size="sm" onClick={onExport} className="h-7 px-2.5 text-[11px] gap-1.5">
+        <Download className="w-3 h-3" />{label}
+      </Button>
+    </div>
+  );
 }
 
 function EmptyState({ msg }: { msg: string }) {

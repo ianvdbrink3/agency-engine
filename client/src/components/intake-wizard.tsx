@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -177,10 +177,10 @@ function TagInput({
 
 // ─── Step components ─────────────────────────────────────────────────────────
 
-function Step1({ onNext }: { onNext: (data: Step1Data) => void }) {
+function Step1({ onNext, defaultValues }: { onNext: (data: Step1Data) => void; defaultValues?: Step1Data }) {
   const form = useForm<Step1Data>({
     resolver: zodResolver(step1Schema),
-    defaultValues: { businessModel: "B2B" },
+    defaultValues: defaultValues ?? { businessModel: "B2B" },
   });
 
   return (
@@ -304,13 +304,15 @@ function Step1({ onNext }: { onNext: (data: Step1Data) => void }) {
 function Step2({
   onNext,
   onBack,
+  defaultValues,
 }: {
   onNext: (data: Step2Data) => void;
   onBack: () => void;
+  defaultValues?: Step2Data;
 }) {
   const form = useForm<Step2Data>({
     resolver: zodResolver(step2Schema),
-    defaultValues: { country: "Nederland", language: "Nederlands" },
+    defaultValues: defaultValues ?? { country: "Nederland", language: "Nederlands" },
   });
 
   return (
@@ -427,11 +429,13 @@ function Step2({
 function Step3({
   onNext,
   onBack,
+  defaultValues,
 }: {
   onNext: (data: Step3Data) => void;
   onBack: () => void;
+  defaultValues?: Step3Data;
 }) {
-  const form = useForm<Step3Data>({ resolver: zodResolver(step3Schema) });
+  const form = useForm<Step3Data>({ resolver: zodResolver(step3Schema), defaultValues });
 
   return (
     <Form {...form}>
@@ -703,17 +707,50 @@ function Step4({
 // ─── Main wizard ─────────────────────────────────────────────────────────────
 
 export function IntakeWizard({ clientId }: IntakeWizardProps) {
-  const [currentStep, setCurrentStep] = useState(0);
+  const DRAFT_KEY = `intake-draft-${clientId}`;
+
+  // Load draft from localStorage
+  function loadDraft() {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  }
+  const draft = loadDraft();
+
+  const [currentStep, setCurrentStep] = useState(draft?.currentStep ?? 0);
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
   const [klantenkaart, setKlantenkaart] = useState<File | null>(null);
-  const [klantenkaartText, setKlantenkaartText] = useState<string>("");
-  const hasKlantenkaart = !!klantenkaart;
+  const [klantenkaartText, setKlantenkaartText] = useState<string>(draft?.klantenkaartText ?? "");
+  const hasKlantenkaart = !!klantenkaart || !!klantenkaartText;
 
-  const [step1Data, setStep1Data] = useState<Step1Data | null>(null);
-  const [step2Data, setStep2Data] = useState<Step2Data | null>(null);
-  const [step3Data, setStep3Data] = useState<Step3Data | null>(null);
+  const [step1Data, setStep1Data] = useState<Step1Data | null>(draft?.step1Data ?? null);
+  const [step2Data, setStep2Data] = useState<Step2Data | null>(draft?.step2Data ?? null);
+  const [step3Data, setStep3Data] = useState<Step3Data | null>(draft?.step3Data ?? null);
+
+  // Save draft to localStorage on any change
+  function saveDraft(updates?: Partial<{ currentStep: number; step1Data: any; step2Data: any; step3Data: any; klantenkaartText: string }>) {
+    try {
+      const d = { currentStep, step1Data, step2Data, step3Data, klantenkaartText, ...updates };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+    } catch {}
+  }
+
+  function clearDraft() {
+    try { localStorage.removeItem(DRAFT_KEY); } catch {}
+  }
+
+  // Warn before leaving with unsaved data
+  useEffect(() => {
+    const hasData = step1Data || step2Data || step3Data || klantenkaartText;
+    if (!hasData) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [step1Data, step2Data, step3Data, klantenkaartText]);
 
   // Read uploaded file as text
   async function handleFileUpload(file: File) {
@@ -811,6 +848,7 @@ export function IntakeWizard({ clientId }: IntakeWizardProps) {
       return project;
     },
     onSuccess: (project) => {
+      clearDraft();
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId, "projects"] });
       toast({
@@ -932,34 +970,40 @@ export function IntakeWizard({ clientId }: IntakeWizardProps) {
         <CardContent className="pt-6 pb-6">
           {currentStep === 0 && (
             <Step1
+              defaultValues={step1Data ?? undefined}
               onNext={(data) => {
                 setStep1Data(data);
                 setCurrentStep(1);
+                saveDraft({ step1Data: data, currentStep: 1 });
               }}
             />
           )}
           {currentStep === 1 && (
             <Step2
+              defaultValues={step2Data ?? undefined}
               onNext={(data) => {
                 setStep2Data(data);
                 setCurrentStep(2);
+                saveDraft({ step2Data: data, currentStep: 2 });
               }}
-              onBack={() => setCurrentStep(0)}
+              onBack={() => { setCurrentStep(0); saveDraft({ currentStep: 0 }); }}
             />
           )}
           {currentStep === 2 && (
             <Step3
+              defaultValues={step3Data ?? undefined}
               onNext={(data) => {
                 setStep3Data(data);
                 setCurrentStep(3);
+                saveDraft({ step3Data: data, currentStep: 3 });
               }}
-              onBack={() => setCurrentStep(1)}
+              onBack={() => { setCurrentStep(1); saveDraft({ currentStep: 1 }); }}
             />
           )}
           {currentStep === 3 && (
             <Step4
               onSubmit={(data) => createProjectMutation.mutate(data)}
-              onBack={() => setCurrentStep(2)}
+              onBack={() => { setCurrentStep(2); saveDraft({ currentStep: 2 }); }}
               isPending={createProjectMutation.isPending}
             />
           )}
