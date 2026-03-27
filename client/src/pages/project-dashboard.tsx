@@ -107,13 +107,30 @@ export default function ProjectDashboard() {
       const ci = `Bedrijf: ${intakeData.companyName}\nWebsite: ${intakeData.domain ?? "onbekend"}\nSector: ${intakeData.industry ?? "onbekend"}\nModel: ${intakeData.businessModel ?? "onbekend"}\nRegio: ${intakeData.region ?? intakeData.country ?? "Nederland"}\nDiensten: ${intakeData.productsServices ?? "onbekend"}\nBudget: €${intakeData.adBudget ?? "1000"}/maand\nConcurrenten: ${intakeData.competitors ?? "onbekend"}\nDoelgroep: ${intakeData.targetAudience ?? "onbekend"}`;
       const extra = intakeData.extraContext ? `\n\nKLANTENKAART:\n${intakeData.extraContext}` : "";
 
-      // Claude calls go through server proxy — key stays server-side
+      // Get API key for direct browser-to-Claude calls (no Vercel timeout!)
+      const keyRes = await apiRequest("POST", "/api/auth/claude-key");
+      const { key: apiKey, model } = await keyRes.json();
+
       async function callClaude(prompt: string) {
-        const res = await apiRequest("POST", "/api/claude-proxy", {
-          prompt,
-          systemPrompt: "Je bent een JSON API. Antwoord UITSLUITEND met valid JSON. Geen markdown, geen backticks. Start direct met {. Houd waardes kort.",
-          maxTokens: 8192,
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 4096,
+            system: "Je bent een JSON API. Antwoord UITSLUITEND met valid JSON. Geen markdown, geen backticks. Start direct met {.",
+            messages: [{ role: "user", content: prompt }],
+          }),
         });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Claude API fout: ${errText.substring(0, 300)}`);
+        }
         const data = await res.json();
         const text = data.content?.map((b: any) => b.text || "").join("") || "";
         const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
@@ -152,7 +169,23 @@ export default function ProjectDashboard() {
       if (type === "seo" || type === "both") {
         setGenerateStep(2);
         setGenerateStatus("SEO & Pijler-Cluster genereren...");
-        seoResult = await callClaude(`Bouw een zoekwoordenonderzoek + pijler-clustermodel.\n\n${ci}${extra}\n\nZOEKWOORDEN:\n${kwStr || "Genereer 20-30 relevante keywords."}\n\nMax 4 categorieën, max 10 kw/cat. Max 4 pijlers, max 5 clusters/pijler, max 4 kw/cluster. Kort!\n\nJSON: {"categories":[{"name":"str","color":"#hex","totalVolume":0,"keywords":[{"keyword":"str","volume":0,"isHighlight":false}]}],"pillars":[{"name":"str","slug":"/str/","description":"kort","icon":"emoji","color":"#hex","totalVolume":0,"clusters":[{"name":"str","slug":"/str/","intent":"informatief|commercieel|transactioneel","keywords":[{"keyword":"str","volume":0}]}]}],"totalKeywords":0,"totalVolume":0}`);
+        seoResult = await callClaude(`Je bent een senior SEO-strateeg bij een toonaangevend Nederlands bureau. Genereer een complete, diepgaande SEO-strategie specifiek voor deze klant.
+
+KLANTPROFIEL:
+${ci}${extra}
+
+BESCHIKBARE ZOEKWOORDEN:
+${kwStr || 'Genereer zelf minimaal 20 relevante keywords met realistische volumes voor deze klant en sector.'}
+
+INSTRUCTIES:
+- Analyseer het klantprofiel grondig — alle output moet 100% klantspecifiek zijn
+- Gebruik de klantenkaart/extra context als primaire bron indien aanwezig
+- Groepeer keywords op intentie en relevantie voor deze specifieke klant
+- Minimaal 15 keywords, 4 categorieën, 4 pijlers met elk minimaal 3 clusters
+- Adviseer ook kansen die de klant zelf niet ziet
+
+JSON: {"categories":[{"name":"str","color":"#hex","totalVolume":0,"keywords":[{"keyword":"str","volume":0,"isHighlight":false}]}],"pillars":[{"name":"str","slug":"/str/","description":"strategische beschrijving gericht op klant","icon":"emoji","color":"#hex","totalVolume":0,"clusters":[{"name":"str","slug":"/str/","intent":"informatief|commercieel|transactioneel","keywords":[{"keyword":"str","volume":0}]}]}],"totalKeywords":0,"totalVolume":0}`);
+
       }
 
       // Step 3: Generate SEA
@@ -160,13 +193,45 @@ export default function ProjectDashboard() {
       if (type === "sea" || type === "both") {
         setGenerateStep(type === "both" ? 3 : 2);
         setGenerateStatus("SEA & Campagnes genereren...");
-        seaResult = await callClaude(`Ontwerp Google Ads campagnes.\n\n${ci}${extra}\nBudget: €${intakeData.adBudget ?? "1000"}/maand\n\nZOEKWOORDEN:\n${kwStr || "Genereer 15 high-intent keywords."}\n\nMax 4 campagnes, max 5 kw/camp, max 8 headlines/camp, 2 descriptions. Max 8 neg keywords. Kort!\n\nJSON: {"campaigns":[{"name":"str","type":"Product|Generiek","color":"#hex","keywords":[{"keyword":"str","matchType":"exact|phrase","volume":0,"cpc":0}],"budget":0,"budgetPercent":0,"landingPage":"/str/","headlines":[{"text":"max30ch","type":"KEYWORD|USP_DIENST|CTA"}],"descriptions":["max90ch"]}],"negativeKeywords":{"accountLevel":[{"keywords":"str","reason":"str"}],"crossCampaign":[{"campaign":"str","excludes":["str"]}]},"targeting":{"locations":[{"name":"str","radius":"str"}],"schedule":{"days":"str","hours":"str"},"devices":[{"type":"Desktop|Mobile","bidAdjust":"str"}],"audiences":["str"]},"performance":{"forecast":[{"metric":"str","value":"str","note":"str"}],"growthPlan":[{"phase":1,"title":"str","description":"str"}]}}`);
+        seaResult = await callClaude(`Je bent een elite Google Ads specialist. Ontwerp een agency-grade SEA-strategie specifiek voor deze klant die morgen live kan.
+
+KLANTPROFIEL:
+${ci}${extra}
+Budget: €${intakeData.adBudget ?? '1000'}/maand
+
+BESCHIKBARE ZOEKWOORDEN:
+${kwStr || 'Genereer zelf minimaal 15 high-intent keywords voor Google Ads voor deze klant en sector.'}
+
+INSTRUCTIES:
+- Alle campagnenames, headlines en descriptions moeten 100% klantspecifiek zijn
+- Gebruik de klantenkaart/extra context als primaire bron indien aanwezig
+- Minimaal 4 campagnes, 5 keywords per campagne, 6 headlines per campagne, 2 descriptions
+- Minimaal 8 negatieve keywords op accountniveau
+- Adviseer ook kansen die de klant zelf niet ziet (nieuw product, seizoen, regio)
+
+JSON: {"campaigns":[{"name":"str","type":"Product|Generiek|Remarketing|Brand","color":"#hex","keywords":[{"keyword":"str","matchType":"exact|phrase|broad","volume":0,"cpc":0}],"budget":0,"budgetPercent":0,"landingPage":"/str/","headlines":[{"text":"max30ch","type":"KEYWORD|USP_DIENST|CTA"}],"descriptions":["max90ch"]}],"negativeKeywords":{"accountLevel":[{"keywords":"str","reason":"str"}],"crossCampaign":[{"campaign":"str","excludes":["str"]}]},"targeting":{"locations":[{"name":"str","radius":"str"}],"schedule":{"days":"str","hours":"str"},"devices":[{"type":"Desktop|Mobile","bidAdjust":"str"}],"audiences":["str"]},"performance":{"forecast":[{"metric":"str","value":"str","note":"str"}],"growthPlan":[{"phase":1,"title":"str","description":"str"}]}}`);
+
       }
 
       // Step 4: Overview
       setGenerateStep(type === "both" ? 4 : 3);
       setGenerateStatus("Dashboard samenvatten...");
-      const overviewResult = await callClaude(`Dashboard overzicht.\n\n${ci}${extra}\nBudget: €${intakeData.adBudget ?? "1000"}/maand\n${seoResult ? `SEO: ${seoResult.totalKeywords ?? "?"} kw, ${seoResult.totalVolume ?? "?"} vol` : ""}\n${seaResult ? `SEA: ${seaResult.campaigns?.length ?? 0} campagnes` : ""}\n\nTop 5 kw, 3 quick wins SEO+SEA, 5 bullets, max 12 checklist items, top 20 kw. Kort!\n\nJSON: {"kpis":{"totalVolume":0,"seoScore":0,"seaScore":0,"trafficPotential":"str","estimatedLeads":"str"},"topKeywords":[{"keyword":"str","volume":0,"intent":"str","reason":"str"}],"quickWins":{"seo":[{"action":"str","impact":"str"}],"sea":[{"action":"str","impact":"str"}]},"strategyBullets":["str"],"checklist":[{"task":"str","category":"str","priority":"high|medium|low"}],"top20":[{"keyword":"str","volume":0,"intent":"str","type":"SEO|SEA","score":0}]}`);
+      const overviewResult = await callClaude(`Je bent een strategisch adviseur. Maak een executive dashboard samenvatting voor deze klant.
+
+KLANTPROFIEL:
+${ci}${extra}
+Budget: €${intakeData.adBudget ?? '1000'}/maand
+${seoResult ? `SEO: ${seoResult.totalKeywords ?? '?'} keywords, ${seoResult.totalVolume ?? '?'} totaal volume` : ''}
+${seaResult ? `SEA: ${seaResult.campaigns?.length ?? 0} campagnes` : ''}
+
+INSTRUCTIES:
+- Alle teksten en aanbevelingen moeten 100% klantspecifiek zijn
+- Top 5 keywords moeten echt relevant zijn voor deze klant
+- Quick wins moeten direct uitvoerbaar zijn voor deze klant
+- Minimaal 5 strategische bullets, 10 checklist items, top 15 keywords
+
+JSON: {"kpis":{"totalVolume":0,"seoScore":0,"seaScore":0,"trafficPotential":"str","estimatedLeads":"str"},"topKeywords":[{"keyword":"str","volume":0,"intent":"str","reason":"str"}],"quickWins":{"seo":[{"action":"str","impact":"str"}],"sea":[{"action":"str","impact":"str"}]},"strategyBullets":["str"],"checklist":[{"task":"str","category":"str","priority":"high|medium|low"}],"top20":[{"keyword":"str","volume":0,"intent":"str","type":"SEO|SEA","score":0}]}`);
+
 
       // Save
       setGenerateStatus("Opslaan...");

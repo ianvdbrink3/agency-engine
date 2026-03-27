@@ -595,6 +595,22 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/auth/claude-key — return API key for authenticated browser-side Claude calls
+  app.post("/api/auth/claude-key", async (req: Request, res: Response) => {
+    try {
+      const user = await requireAuth(req, res);
+      if (!user) return;
+      const dbKey = await storage.getSetting("anthropic_api_key");
+      const apiKey = dbKey || process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) return res.status(400).json({ message: "Anthropic API key niet ingesteld. Ga naar Instellingen." });
+      const dbModel = await storage.getSetting("ai_model");
+      const model = dbModel || "claude-sonnet-4-20250514";
+      return res.json({ key: apiKey, model });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message ?? "Fout bij ophalen API key" });
+    }
+  });
+
   // POST /api/claude-proxy — secure proxy (auth + rate limit + validation)
   app.post("/api/claude-proxy", proxyLimiter, async (req: Request, res: Response) => {
     try {
