@@ -111,7 +111,7 @@ export default function ProjectDashboard() {
       const keyRes = await apiRequest("POST", "/api/auth/claude-key");
       const { key: apiKey, model } = await keyRes.json();
 
-      async function callClaude(prompt: string) {
+      async function callClaude(prompt: string, maxTokens = 3000) {
         const res = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: {
@@ -122,8 +122,8 @@ export default function ProjectDashboard() {
           },
           body: JSON.stringify({
             model,
-            max_tokens: 4096,
-            system: "Je bent een JSON API. Antwoord UITSLUITEND met valid JSON. Geen markdown, geen backticks. Start direct met {.",
+            max_tokens: maxTokens,
+            system: "Je bent een JSON API. Antwoord UITSLUITEND met valid JSON. Geen markdown, geen uitleg, geen backticks. Start DIRECT met { en sluit af met }. Zorg dat de JSON altijd volledig en geldig is.",
             messages: [{ role: "user", content: prompt }],
           }),
         });
@@ -136,12 +136,12 @@ export default function ProjectDashboard() {
         const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
         if (!cleaned) throw new Error("Leeg antwoord van Claude");
 
-        // Try direct parse
+        // Try direct parse first
         try { return JSON.parse(cleaned); } catch {}
 
-        // Extract JSON
+        // Extract outermost JSON object
         const start = cleaned.indexOf("{");
-        if (start === -1) throw new Error("Geen JSON gevonden");
+        if (start === -1) throw new Error("Geen JSON gevonden in antwoord");
         let depth = 0, end = start, inStr = false, esc = false;
         for (let i = start; i < cleaned.length; i++) {
           const ch = cleaned[i];
@@ -153,6 +153,7 @@ export default function ProjectDashboard() {
           if (ch === "}" || ch === "]") { depth--; if (depth === 0) { end = i; break; } }
         }
         let jsonStr = cleaned.substring(start, end + 1);
+        // Repair truncated JSON
         if (depth > 0) {
           jsonStr = jsonStr.replace(/,\s*"[^"]*$/, "").replace(/,\s*$/, "");
           let ob = 0, oq = 0, s2 = false, e2 = false;
@@ -169,7 +170,7 @@ export default function ProjectDashboard() {
       if (type === "seo" || type === "both") {
         setGenerateStep(2);
         setGenerateStatus("SEO & Pijler-Cluster genereren...");
-        seoResult = await callClaude(`Je bent een senior SEO-strateeg. Maak een zoekwoordstrategie voor een SPECIFIEKE klant. Lees het klantprofiel nauwkeurig.
+        try { seoResult = await callClaude(`Je bent een senior SEO-strateeg. Maak een zoekwoordstrategie voor een SPECIFIEKE klant. Lees het klantprofiel nauwkeurig.
 
 KLANTPROFIEL:
 ${ci}${extra}
@@ -189,9 +190,9 @@ VERPLICHT:
 - Clusters = varianten per dienst of doelgroepsegment van deze klant
 - Locatie-keywords indien de klant regionaal actief is
 
-Genereer minimaal 20 keywords, 4 categorieën, 4 pijlers met elk minimaal 3 clusters.
+Genereer 15-20 keywords verdeeld over 3-4 categorieën. Maximaal 4 keywords per categorie. 3-4 pijlers met elk 2-3 clusters. Maximaal 3 keywords per cluster. Houd het compact maar volledig.
 
-JSON: {"categories":[{"name":"str","color":"#hex","totalVolume":0,"keywords":[{"keyword":"str","volume":0,"isHighlight":false}]}],"pillars":[{"name":"str","slug":"/str/","description":"str","icon":"emoji","color":"#hex","totalVolume":0,"clusters":[{"name":"str","slug":"/str/","intent":"informatief|commercieel|transactioneel","keywords":[{"keyword":"str","volume":0}]}]}],"totalKeywords":0,"totalVolume":0}`);
+JSON: {"categories":[{"name":"str","color":"#hex","totalVolume":0,"keywords":[{"keyword":"str","volume":0,"isHighlight":false}]}],"pillars":[{"name":"str","slug":"/str/","description":"str","icon":"emoji","color":"#hex","totalVolume":0,"clusters":[{"name":"str","slug":"/str/","intent":"informatief|commercieel|transactioneel","keywords":[{"keyword":"str","volume":0}]}]}],"totalKeywords":0,"totalVolume":0}`, 2500); } catch(e: any) { console.error("SEO fout:", e); if (type === "seo") throw e; setGenerateStatus("SEO mislukt, SEA wordt nog gegenereerd..."); }
 
       }
 
@@ -200,7 +201,7 @@ JSON: {"categories":[{"name":"str","color":"#hex","totalVolume":0,"keywords":[{"
       if (type === "sea" || type === "both") {
         setGenerateStep(type === "both" ? 3 : 2);
         setGenerateStatus("SEA & Campagnes genereren...");
-        seaResult = await callClaude(`Je bent een Google Ads specialist. Maak een SEA-strategie voor een SPECIFIEKE klant. Lees het klantprofiel nauwkeurig.
+        try { seaResult = await callClaude(`Je bent een Google Ads specialist. Maak een SEA-strategie voor een SPECIFIEKE klant. Lees het klantprofiel nauwkeurig.
 
 KLANTPROFIEL:
 ${ci}${extra}
@@ -221,9 +222,9 @@ VERPLICHT:
 - Locatietargeting = regio uit klantprofiel
 - Denk: wat typt iemand als hij op zoek is naar wat deze klant aanbiedt?
 
-Minimaal 4 campagnes, 5 keywords per campagne, 6 headlines, 2 descriptions, 8 negatieve keywords.
+Genereer 3-4 campagnes, max 4 keywords per campagne, max 5 headlines per campagne, 2 descriptions, 5-8 negatieve keywords. Houd het compact maar volledig.
 
-JSON: {"campaigns":[{"name":"str","type":"Product|Generiek|Remarketing|Brand","color":"#hex","keywords":[{"keyword":"str","matchType":"exact|phrase|broad","volume":0,"cpc":0}],"budget":0,"budgetPercent":0,"landingPage":"/str/","headlines":[{"text":"max30ch","type":"KEYWORD|USP_DIENST|CTA"}],"descriptions":["max90ch"]}],"negativeKeywords":{"accountLevel":[{"keywords":"str","reason":"str"}],"crossCampaign":[{"campaign":"str","excludes":["str"]}]},"targeting":{"locations":[{"name":"str","radius":"str"}],"schedule":{"days":"str","hours":"str"},"devices":[{"type":"Desktop|Mobile","bidAdjust":"str"}],"audiences":["str"]},"performance":{"forecast":[{"metric":"str","value":"str","note":"str"}],"growthPlan":[{"phase":1,"title":"str","description":"str"}]}}`);
+JSON: {"campaigns":[{"name":"str","type":"Product|Generiek|Remarketing|Brand","color":"#hex","keywords":[{"keyword":"str","matchType":"exact|phrase|broad","volume":0,"cpc":0}],"budget":0,"budgetPercent":0,"landingPage":"/str/","headlines":[{"text":"max30ch","type":"KEYWORD|USP_DIENST|CTA"}],"descriptions":["max90ch"]}],"negativeKeywords":{"accountLevel":[{"keywords":"str","reason":"str"}],"crossCampaign":[{"campaign":"str","excludes":["str"]}]},"targeting":{"locations":[{"name":"str","radius":"str"}],"schedule":{"days":"str","hours":"str"},"devices":[{"type":"Desktop|Mobile","bidAdjust":"str"}],"audiences":["str"]},"performance":{"forecast":[{"metric":"str","value":"str","note":"str"}],"growthPlan":[{"phase":1,"title":"str","description":"str"}]}}`, 2500); } catch(e: any) { console.error("SEA fout:", e); if (type === "sea") throw e; setGenerateStatus("SEA mislukt, dashboard wordt nog gegenereerd..."); }
 
       }
 
