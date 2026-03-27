@@ -96,15 +96,101 @@ export default function ProjectDashboard() {
     mutationFn: async (type: "seo" | "sea" | "both") => {
       startTimer();
       setGenerateStep(1);
-      setGenerateTotalSteps(3);
-      setGenerateStatus(type === "both" ? "SEO + SEA strategie genereren..." : type === "seo" ? "SEO strategie genereren..." : "SEA strategie genereren...");
+      setGenerateTotalSteps(type === "both" ? 4 : 3);
+      setGenerateStatus("Data ophalen...");
 
-      // Poll-style: the server does all Claude calls
-      const res = await apiRequest("POST", `/api/projects/${projectId}/generate`, { type });
-      const data = await res.json();
+      // Step 1: Get intake + keywords from server
+      const prepRes = await apiRequest("POST", `/api/projects/${projectId}/prepare`);
+      const { intake: intakeData, keywords } = await prepRes.json();
+
+      const kwStr = (keywords || []).slice(0, 50).map((k: any) => `${k.keyword} (vol:${k.volume}, kd:${k.difficulty}, cpc:€${k.cpc})`).join("\n");
+      const ci = `Bedrijf: ${intakeData.companyName}\nWebsite: ${intakeData.domain ?? "onbekend"}\nSector: ${intakeData.industry ?? "onbekend"}\nModel: ${intakeData.businessModel ?? "onbekend"}\nRegio: ${intakeData.region ?? intakeData.country ?? "Nederland"}\nDiensten: ${intakeData.productsServices ?? "onbekend"}\nBudget: €${intakeData.adBudget ?? "1000"}/maand\nConcurrenten: ${intakeData.competitors ?? "onbekend"}\nDoelgroep: ${intakeData.targetAudience ?? "onbekend"}`;
+      const extra = intakeData.extraContext ? `\n\nKLANTENKAART:\n${intakeData.extraContext}` : "";
+
+      // Claude calls go through server proxy — key stays server-side
+      async function callClaude(prompt: string) {
+        const res = await apiRequest("POST", "/api/claude-proxy", {
+          prompt,
+          systemPrompt: "Je bent een JSON API. Antwoord UITSLUITEND met valid JSON. Geen markdown, geen backticks. Start direct met {. Houd waardes kort.",
+          maxTokens: 8192,
+        });
+        const data = await res.json();
+        const text = data.content?.map((b: any) => b.text || "").join("") || "";
+        const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+        if (!cleaned) throw new Error("Leeg antwoord van Claude");
+
+        // Try direct parse
+        try { return JSON.parse(cleaned); } catch {}
+
+        // Extract JSON
+        const start = cleaned.indexOf("{");
+        if (start === -1) throw new Error("Geen JSON gevonden");
+        let depth = 0, end = start, inStr = false, esc = false;
+        for (let i = start; i < cleaned.length; i++) {
+          const ch = cleaned[i];
+          if (esc) { esc = false; continue; }
+          if (ch === "\\") { esc = true; continue; }
+          if (ch === '"') { inStr = !inStr; continue; }
+          if (inStr) continue;
+          if (ch === "{" || ch === "[") depth++;
+          if (ch === "}" || ch === "]") { depth--; if (depth === 0) { end = i; break; } }
+        }
+        let jsonStr = cleaned.substring(start, end + 1);
+        if (depth > 0) {
+          jsonStr = jsonStr.replace(/,\s*"[^"]*$/, "").replace(/,\s*$/, "");
+          let ob = 0, oq = 0, s2 = false, e2 = false;
+          for (const c of jsonStr) { if (e2) { e2 = false; continue; } if (c === "\\") { e2 = true; continue; } if (c === '"') { s2 = !s2; continue; } if (s2) continue; if (c === "{") ob++; if (c === "}") ob--; if (c === "[") oq++; if (c === "]") oq--; }
+          for (let i = 0; i < oq; i++) jsonStr += "]";
+          for (let i = 0; i < ob; i++) jsonStr += "}";
+        }
+        try { return JSON.parse(jsonStr); } catch {}
+        return JSON.parse(jsonStr.replace(/,\s*}/g, "}").replace(/,\s*\]/g, "]"));
+      }
+
+      // Step 2: Generate SEO
+      let seoResult: any = null;
+      if (type === "seo" || type === "both") {
+        setGenerateStep(2);
+        setGenerateStatus("SEO & Pijler-Cluster genereren...");
+        seoResult = await callClaude(`Bouw een zoekwoordenonderzoek + pijler-clustermodel.\n\n${ci}${extra}\n\nZOEKWOORDEN:\n${kwStr || "Genereer 20-30 relevante keywords."}\n\nMax 4 categorieën, max 10 kw/cat. Max 4 pijlers, max 5 clusters/pijler, max 4 kw/cluster. Kort!\n\nJSON: {"categories":[{"name":"str","color":"#hex","totalVolume":0,"keywords":[{"keyword":"str","volume":0,"isHighlight":false}]}],"pillars":[{"name":"str","slug":"/str/","description":"kort","icon":"emoji","color":"#hex","totalVolume":0,"clusters":[{"name":"str","slug":"/str/","intent":"informatief|commercieel|transactioneel","keywords":[{"keyword":"str","volume":0}]}]}],"totalKeywords":0,"totalVolume":0}`);
+      }
+
+      // Step 3: Generate SEA
+      let seaResult: any = null;
+      if (type === "sea" || type === "both") {
+        setGenerateStep(type === "both" ? 3 : 2);
+        setGenerateStatus("SEA & Campagnes genereren...");
+        seaResult = await callClaude(`Ontwerp Google Ads campagnes.\n\n${ci}${extra}\nBudget: €${intakeData.adBudget ?? "1000"}/maand\n\nZOEKWOORDEN:\n${kwStr || "Genereer 15 high-intent keywords."}\n\nMax 4 campagnes, max 5 kw/camp, max 8 headlines/camp, 2 descriptions. Max 8 neg keywords. Kort!\n\nJSON: {"campaigns":[{"name":"str","type":"Product|Generiek","color":"#hex","keywords":[{"keyword":"str","matchType":"exact|phrase","volume":0,"cpc":0}],"budget":0,"budgetPercent":0,"landingPage":"/str/","headlines":[{"text":"max30ch","type":"KEYWORD|USP_DIENST|CTA"}],"descriptions":["max90ch"]}],"negativeKeywords":{"accountLevel":[{"keywords":"str","reason":"str"}],"crossCampaign":[{"campaign":"str","excludes":["str"]}]},"targeting":{"locations":[{"name":"str","radius":"str"}],"schedule":{"days":"str","hours":"str"},"devices":[{"type":"Desktop|Mobile","bidAdjust":"str"}],"audiences":["str"]},"performance":{"forecast":[{"metric":"str","value":"str","note":"str"}],"growthPlan":[{"phase":1,"title":"str","description":"str"}]}}`);
+      }
+
+      // Step 4: Overview
+      setGenerateStep(type === "both" ? 4 : 3);
+      setGenerateStatus("Dashboard samenvatten...");
+      const overviewResult = await callClaude(`Dashboard overzicht.\n\n${ci}${extra}\nBudget: €${intakeData.adBudget ?? "1000"}/maand\n${seoResult ? `SEO: ${seoResult.totalKeywords ?? "?"} kw, ${seoResult.totalVolume ?? "?"} vol` : ""}\n${seaResult ? `SEA: ${seaResult.campaigns?.length ?? 0} campagnes` : ""}\n\nTop 5 kw, 3 quick wins SEO+SEA, 5 bullets, max 12 checklist items, top 20 kw. Kort!\n\nJSON: {"kpis":{"totalVolume":0,"seoScore":0,"seaScore":0,"trafficPotential":"str","estimatedLeads":"str"},"topKeywords":[{"keyword":"str","volume":0,"intent":"str","reason":"str"}],"quickWins":{"seo":[{"action":"str","impact":"str"}],"sea":[{"action":"str","impact":"str"}]},"strategyBullets":["str"],"checklist":[{"task":"str","category":"str","priority":"high|medium|low"}],"top20":[{"keyword":"str","volume":0,"intent":"str","type":"SEO|SEA","score":0}]}`);
+
+      // Save
+      setGenerateStatus("Opslaan...");
+      const saveBody = {
+        overview: JSON.stringify(overviewResult),
+        seoKeywords: JSON.stringify(seoResult?.categories ?? []),
+        pillarCluster: JSON.stringify(seoResult?.pillars ?? []),
+        seaCampaigns: JSON.stringify(seaResult?.campaigns ?? []),
+        adCopy: JSON.stringify((seaResult?.campaigns ?? []).map((c: any) => ({ name: c.name, color: c.color, headlines: c.headlines ?? [], descriptions: c.descriptions ?? [] }))),
+        negatives: JSON.stringify(seaResult?.negativeKeywords ?? {}),
+        targeting: JSON.stringify(seaResult?.targeting ?? {}),
+        performance: JSON.stringify(seaResult?.performance ?? {}),
+        checklist: JSON.stringify(overviewResult?.checklist ?? []),
+      };
+      try { await apiRequest("POST", `/api/projects/${projectId}/save-dashboard`, saveBody); } catch (e) { console.warn("Dashboard save:", e); }
+      try { await apiRequest("POST", `/api/projects/${projectId}/save-strategy`, {
+        summary: { executiveSummary: overviewResult?.strategyBullets?.join("\n\n") ?? "", keyFindings: JSON.stringify(overviewResult?.topKeywords ?? []), recommendations: JSON.stringify(overviewResult?.strategyBullets ?? []), implementationChecklist: JSON.stringify(overviewResult?.checklist ?? []), performanceEstimates: JSON.stringify(seaResult?.performance?.forecast ?? []) },
+        ...(seoResult ? { seo: { keywords: JSON.stringify(seoResult.categories?.flatMap((c: any) => c.keywords) ?? []), clusters: JSON.stringify(seoResult.pillars?.map((p: any) => ({ name: p.name, pillarKeyword: p.name, totalVolume: p.totalVolume, avgDifficulty: 0, intent: "commercial", keywords: p.clusters?.flatMap((c: any) => c.keywords) ?? [] })) ?? []), pillarPages: JSON.stringify(seoResult.pillars?.map((p: any) => ({ title: p.name, slug: p.slug, pillarKeyword: p.name, totalVolume: p.totalVolume, clusterPages: p.clusters?.map((c: any) => ({ title: c.name, slug: c.slug, keyword: c.keywords?.[0]?.keyword ?? "" })) ?? [] })) ?? []), contentIdeas: "[]", internalLinks: "[]", metadata: "[]", priorityMatrix: "[]" } } : {}),
+        ...(seaResult ? { sea: { campaigns: JSON.stringify(seaResult.campaigns ?? []), adGroups: JSON.stringify([]), negativeKeywords: JSON.stringify(seaResult.negativeKeywords?.accountLevel?.map((n: any) => n.keywords) ?? []), adCopy: "{}", budgetAllocation: JSON.stringify((seaResult.campaigns ?? []).map((c: any) => ({ name: c.name, budget: c.budget ?? 0, percent: c.budgetPercent ?? 0 }))), landingPages: "[]", bidStrategy: "[]" } } : {}),
+      }); } catch (e) { console.warn("Legacy save:", e); }
+
       stopTimer();
       setGenerateStatus("");
-      return data;
+      return { success: true };
     },
     onSuccess: () => {
       stopTimer();
